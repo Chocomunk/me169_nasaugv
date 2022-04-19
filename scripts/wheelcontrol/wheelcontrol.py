@@ -23,7 +23,7 @@ import time
 import rospy
 
 from encoder import Encoder
-from driver import Driver
+from ..motor.driver_qwiic import Driver
 
 from sensor_msgs.msg import JointState
 
