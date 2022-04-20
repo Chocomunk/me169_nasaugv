@@ -5,7 +5,7 @@
 #   Continually (at 10Hz!) send the a velocity command.
 #
 #   Node:       /teleop
-#   Publish:    /vel_cmd          sensor_msgs/JointState
+#   Publish:    /vel_cmd          geometry_msgs/Twist
 #   Subscribe:  -none-
 #
 import curses
@@ -78,12 +78,13 @@ def loop(screen):
                 vel = (0.0, 0.0)
             elif (keycode & 0x1F) == (ord('q') & 0x1F):
                 rospy.signal_shutdown("quitting")       # q = quit
+                return
             else:
                 vel = map[keycode]
 
         # Report.
         if (key >= 0x20) and (key <= 0x80):
-            s = "'" + str(unichr(key)) + "'"
+            s = "'" + str(chr(key)) + "'"
         else:
             s = "%d" % key
         screen.addstr(8, 0, "Last pressed 0x%02x = %s" % (key, s))
@@ -109,11 +110,18 @@ if __name__ == "__main__":
 
     # Pull out the nominal forward/spin speeds from the non-ROS parameters.
     argv = rospy.myargv(argv=sys.argv)
-    if (len(argv) != 3):
+    if (len(argv) > 3):
         print("Usage: teleop.py forward_speed spin_speed")
+        print("GOOD DEFAULTS: teleop.py 0.2 1.0")
         sys.exit(0)
-    vnom = float(argv[1])
-    wnom = float(argv[2])
+    elif (len(argv) < 3):
+        print("Usage: teleop.py forward_speed spin_speed")
+        print("Using default values: teleop.py 0.2 1.0")
+        vnom = 0.2
+        wnom = 1.0
+    else:
+        vnom = float(argv[1])
+        wnom = float(argv[2])
 
     # Create a publisher to send twist commands.
     pub = rospy.Publisher('/vel_cmd', Twist, queue_size=10)
