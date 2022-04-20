@@ -21,160 +21,174 @@ import math
 import sys
 import time
 import rospy
+import smbus
 
 from encoder import Encoder
-from ..motor.driver_qwiic import Driver
+from motor.driver_i2c import Driver
 
 from sensor_msgs.msg import JointState
 
 
 # ----- Constants -----
-GR = 2. * math.pi / 720     # 720 counts / full rotation
 DT = 1. / 100       # 100 Hz
-ACTLAM = 1. / 0.05  # T = 0.05s,     Default: -1
-DESLAM = 1. / 0.1   # T = 0.1s
-CORLAM = 1. / 0.35   # T = 0.25s
-
-#    PID constants
-P = 50
-I = 50
-PWM_I = 0.5
-
-# Wind-up limits
-plim = 3 * math.pi / 4
-cumplim = math.pi / 3
-
-#   Encoder channels
-chLA = 24
-chLB = 25
-chRA = 23
-chRB = 22
-
-#    Driver constants
-chL = 0
-chR = 1
-reserveL = 1
-reverseR = 1
-
 
 # --------- Initialize global vars ----------
-cmdvel = [0, 0]
-cmdtime = 0
-
-# Actual state values
-lpos = 0
-rpos = 0
-lvel = 0
-rvel = 0
-
-# Desired state values
-deslpos = 0
-desrpos = 0
-deslvel = 0
-desrvel = 0
-
-# PID error state values
-cumlperr = 0
-cumrperr = 0
 
 
-# (bottom) pwm = 9.6 v - 22.4
-# (top)    pwm = 9.6 v + 22.4
-def pwm(vel):
-    k = 22.4 * math.copysign(1, vel)
-    return 9.6 * vel + k
+
+class WheelControlObj:
+
+    # Physical constants
+    GR = 2. * math.pi / 720     # 720 counts / full rotation
+    plim = 3 * math.pi / 4      # p-error limit
+    cumplim = math.pi / 3       # cumulative-p-error limit
+
+    # Filter Constants
+    ACTLAM = 1. / 0.05  # T = 0.05s,     Default: -1
+    DESLAM = 1. / 0.1   # T = 0.1s
+    CORLAM = 1. / 0.35   # T = 0.25s
+
+    # PID constants
+    P = 50
+    I = 50
+    PWM_I = 0.5
+
+    def __init__(self, publish_desired, publish_actual,
+                enc_chLA=24, enc_chLB=25, enc_chRA=23, enc_chRB=22,
+                drv_chL=0, drv_chR=1, drv_revL=1, drv_revR = 1):
+        # Inititlize the low level.
+        self.i2cbus = smbus.SMBus(1)
+        self.encoder = Encoder(enc_chLA, enc_chLB, enc_chRA, enc_chRB)
+        self.driver  = Driver(self.i2cbus, drv_chL, drv_chR, drv_revL, drv_revR)
+
+        # Default values for params
+        if self.ACTLAM < 0:
+            self.ACTLAM = 1. / dt
+        if self.DESLAM < 0:
+            self.DESLAM = 1. / dt
+        self.ACTLAM = max(0, min(self.ACTLAM, 1. / dt))
+        self.DESLAM = max(0, min(self.DESLAM, 1. / dt))
+
+        # Store publishers
+        self.publish_des = publish_desired
+        self.publish_act = publish_actual
+
+        # ---------- Initialize state variables ----------
+        self.cmdvel = [0, 0]
+        self.cmdtime = 0
+
+        # Actual state values
+        self.lpos = 0
+        self.rpos = 0
+        self.lvel = 0
+        self.rvel = 0
+
+        # Desired state values
+        self.deslpos = 0
+        self.desrpos = 0
+        self.deslvel = 0
+        self.desrvel = 0
+
+        # PID error state values
+        self.cumlperr = 0
+        self.cumrperr = 0
+
+    def shutdown(self):
+        """ Clean up the low level. """
+        self.driver.shutdown()
+        self.encoder.shutdown()
+
+    def pwm(self, vel):
+        """ Map velocity into PWM """
+        # (bottom) pwm = 9.6 v - 22.4
+        # (top)    pwm = 9.6 v + 22.4
+        k = 22.4 * math.copysign(1, vel)
+        return 9.6 * vel + k
+
+    def callback_command(self, msg):
+        """
+        Command Callback Function
+
+        Save the command and the time received.
+        """
+        # TODO: Check the message?
+
+        # Note the current time (to timeout the command).
+        now = rospy.Time.now()
+
+        # Save...
+        self.cmdvel  = msg.velocity
+        self.cmdtime = now
 
 
-#
-#   Command Callback Function
-#
-#   Save the command and the time received.
-#
-def callback_command(msg):
-    global cmdvel, cmdtime
+    def callback_timer(self, event):
+        """ Timer Callback Function """
+        # Note the current time to compute dt and populate the ROS messages.
+        now = rospy.Time.now()
 
-    # TODO: Check the message?
+        # Process the commands.
+        if (now - self.cmdtime).to_sec() > 0.25:
+            lvelcmd, rvelcmd = 0, 0
+        else:
+            lvelcmd, rvelcmd = self.cmdvel
 
-    # Note the current time (to timeout the command).
-    now = rospy.Time.now()
+        # Filter desired velocity
+        self.deslvel = self.deslvel + self.DESLAM * dt * (lvelcmd - self.deslvel)
+        self.desrvel = self.desrvel + self.DESLAM * dt * (rvelcmd - self.desrvel)
 
-    # Save...
-    cmdvel  = msg.velocity
-    cmdtime = now
+        self.deslpos += self.deslvel * dt
+        self.desrpos += self.desrvel * dt
 
+        # Process the encoders, convert to wheel angles!
+        lastlpos = self.lpos     # Save previous values
+        lastrpos = self.rpos
 
-#
-#   Timer Callback Function
-#
-def callback_timer(event):
-    global lpos, rpos, lvel, rvel
-    global deslpos, desrpos, deslvel, desrvel
-    global lverr, rverr, cumlperr, cumrperr
+        self.lpos = self.GR * self.encoder.leftencoder()
+        self.rpos = self.GR * self.encoder.rightencoder()
 
-    # Note the current time to compute dt and populate the ROS messages.
-    now = rospy.Time.now()
+        # Compute AND filter actual velocity
+        self.lvel = (1 - self.ACTLAM * dt) * self.lvel + self.ACTLAM * (self.lpos - lastlpos)
+        self.rvel = (1 - self.ACTLAM * dt) * self.rvel + self.ACTLAM * (self.rpos - lastrpos)
 
-    # Process the commands.
-    if (now - cmdtime).to_sec() > 0.25:
-        lvelcmd, rvelcmd = 0, 0
-    else:
-        lvelcmd, rvelcmd = cmdvel
+        # Add corrective velocity to desired
+        corrlvel = self.deslvel
+        corrrvel = self.desrvel
 
-    deslvel = deslvel + DESLAM * dt * (lvelcmd - deslvel)            # filtering
-    desrvel = desrvel + DESLAM * dt * (rvelcmd - desrvel)
+        # PID update
+        lperr = min(self.plim, max(self.deslpos - self.lpos, -self.plim))
+        rperr = min(self.plim, max(self.desrpos - self.rpos, -self.plim))
 
-    deslpos += deslvel * dt
-    desrpos += desrvel * dt
+        self.deslpos = lperr + self.lpos
+        self.desrpos = rperr + self.rpos
 
-    # Process the encoders, convert to wheel angles!
-    lastlpos = lpos     # Save previous values
-    lastrpos = rpos
+        self.cumlperr += min(self.cumplim, max(lperr * dt, -self.cumplim))
+        self.cumrperr += min(self.cumplim, max(rperr * dt, -self.cumplim))
 
-    lpos = GR * encoder.leftencoder()
-    rpos = GR * encoder.rightencoder()
+        # Generate motor commands (convert wheel speed to PWM with PID)
+        pwml = self.pwm(corrlvel + self.CORLAM * lperr + self.PWM_I * self.cumlperr)
+        pwmr = self.pwm(corrrvel + self.CORLAM * rperr + self.PWM_I * self.cumrperr)
 
-    lvel = (1 - ACTLAM * dt) * lvel + ACTLAM * (lpos - lastlpos)      # filtering
-    rvel = (1 - ACTLAM * dt) * rvel + ACTLAM * (rpos - lastrpos)
+        # Send wheel commands.
+        self.driver.left(pwml)
+        self.driver.right(-pwmr)  # Might need to be negative
 
-    # Add corrective velocity to desired
-    corrlvel = deslvel
-    corrrvel = desrvel
+        # Publish the actual wheel state
+        msg = JointState()
+        msg.header.stamp = now
+        msg.name         = ['leftwheel', 'rightwheel']
+        msg.position     = [self.lpos, self.rpos]
+        msg.velocity     = [self.lvel, self.rvel]
+        msg.effort       = [0.0, 0.0]
+        self.publish_act.publish(msg)
 
-    # PID update
-    lperr = min(plim, max(deslpos - lpos, -plim))
-    rperr = min(plim, max(desrpos - rpos, -plim))
-
-    deslpos = lperr + lpos
-    desrpos = rperr + rpos
-
-    cumlperr += min(cumplim, max(lperr * dt, -cumplim))
-    cumrperr += min(cumplim, max(rperr * dt, -cumplim))
-
-    # Generate motor commands (convert wheel speed to PWM with PID)
-    pwml = pwm(corrlvel + CORLAM * lperr + PWM_I * cumlperr)
-    pwmr = pwm(corrrvel + CORLAM * rperr + PWM_I * cumrperr)
-
-    # Send wheel commands.
-    driver.left(pwml)
-    driver.right(-pwmr)  # Might need to be negative
-
-    # Publish the actual wheel state
-    msg = JointState()
-    msg.header.stamp = now
-    msg.name         = ['leftwheel', 'rightwheel']
-    msg.position     = [lpos, rpos]
-    msg.velocity     = [lvel, rvel]
-    msg.effort       = [0.0, 0.0]
-    pubact.publish(msg)
-
-    # Publish the desired wheel state
-    msg = JointState()
-    msg.header.stamp = rospy.Time.now()
-    msg.name         = ['leftwheel', 'rightwheel']
-    msg.position     = [deslpos, desrpos]
-    msg.velocity     = [deslvel, desrvel]
-    msg.effort       = [pwml, pwmr]
-    pubdes.publish(msg)
+        # Publish the desired wheel state
+        msg = JointState()
+        msg.header.stamp = rospy.Time.now()
+        msg.name         = ['leftwheel', 'rightwheel']
+        msg.position     = [self.deslpos, self.desrpos]
+        msg.velocity     = [self.deslvel, self.desrvel]
+        msg.effort       = [pwml, pwmr]
+        self.publish_des.publish(msg)
 
 
 #
@@ -183,34 +197,22 @@ def callback_timer(event):
 if __name__ == "__main__":
     # Initialize the ROS node.
     rospy.init_node('wheelcontrol')
-    cmdtime = rospy.Time.now()
-
-    # Inititlize the low level.
-    encoder = Encoder(chLA, chLB, chRA, chRB)
-    driver  = Driver(chL, chR, reserveL, reverseR)
 
     # Create a publisher to send the wheel desired and actual (state).
     pubdes = rospy.Publisher('/wheel_desired', JointState, queue_size=10)
     pubact = rospy.Publisher('/wheel_state',   JointState, queue_size=10)
 
+    # Initialize state and drivers
+    wheelcontrol = WheelControlObj(pubdes, pubact)
+    wheelcontrol.cmdtime = rospy.Time.now()
+
     # Create a subscriber to listen to wheel commands.
-    sub = rospy.Subscriber("/wheel_command", JointState, callback_command)
+    sub = rospy.Subscriber("/wheel_command", JointState, wheelcontrol.callback_command)
 
     # Create the timer.
-    duration = rospy.Duration(DT);
+    duration = rospy.Duration(DT)
     dt       = duration.to_sec()
-    timer    = rospy.Timer(duration, callback_timer)
-
-    # Default values for params
-    if ACTLAM < 0:
-        ACTLAM = 1. / dt
-    if DESLAM < 0:
-        DESLAM = 1. / dt
-    ACTLAM = max(0, min(ACTLAM, 1. / dt))
-    DESLAM = max(0, min(DESLAM, 1. / dt))
-
-    print(ACTLAM)
-    print(DESLAM)
+    timer    = rospy.Timer(duration, wheelcontrol.callback_timer)
 
     # Spin while the callbacks are doing all the work.
     rospy.loginfo("Running with dt = %.3f sec..." % dt)
@@ -220,6 +222,5 @@ if __name__ == "__main__":
     # Stop the timer (if not already done).
     timer.shutdown()
 
-    # Clean up the low level.
-    driver.shutdown()
-    encoder.shutdown()
+    # Shutdown drivers
+    wheelcontrol.shutdown()
