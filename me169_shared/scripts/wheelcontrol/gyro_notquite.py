@@ -58,10 +58,12 @@ class Gyro:
 
         # Set the gyro scale (default 500 deg/sec).  Feel free to change.
         self.setscale(scale)
-        
-        # Assume a zero gyro offset, but then calibrate (measure).
-        self.offset = 0.0
-        self.calibrate()
+
+        # Set the offset by calibration.
+        self.offset = self.calibrate()
+
+        # Assume the current reading is thus zero.
+        self.reading = (0.0, False)
 
         # Report.
         print("Gyro enabled.")
@@ -98,24 +100,26 @@ class Gyro:
         sum  = 0.0
         sum2 = 0.0
         for i in range(N):
-            (speed, _) = self.read()
+            (speed, _) = self.readraw()
             sum  = sum  + speed
             sum2 = sum2 + speed**2
             time.sleep(0.01)
         avg = sum/N
         std = math.sqrt((sum2 - N*avg**2)/(N-1))
 
-        # Udpate the offset, report, and check whether the std is
-        # above an acceptable limit which would imply movement.
-        self.offset = self.offset + avg
-        stdlim      = 0.01
+        # Report and check whether the std is above an acceptable
+        # limit which would imply movement.
+        stdlim = 0.01
         print("Gyro offset %.3f rad/sec (std %.3f <= %.3f limit)"
-              % (self.offset, std, stdlim))
+              % (avg, std, stdlim))
         if (std > stdlim):
             raise Exception("IMU was held or moving during gyro calibration")
 
+        # Return the offset, being the average reading.
+        return avg
 
-    def read(self):
+
+    def readraw(self):
         # Grab the high (first) and low byte (second) in one read.
         bytes = self.readRegList(self.REG_GYROZ, 2)
 
@@ -127,12 +131,29 @@ class Gyro:
         # Check for saturation.
         saturated = ((value > 32700) or (value < -32700))
 
-        # Scale into rad/sec and subtract the offset.
+        # Scale into rad/sec.
         Given the value and the full scale, can you determine:
-        omega = SOMETHING - self.offset
+        omegaraw = SOMETHING
     
         # Return the speed and saturation flag.
-        return (omega, saturated)
+        return (omegaraw, saturated)
+
+
+    def read(self):
+        # Place the code in a try statement, in case the read fails.
+        try:
+            # Take the reading.
+            (omega, saturated) = self.readraw()
+
+            # Subtract the offset and save the reading.
+            self.reading = (omega - self.offset, saturated)
+
+        except:
+            # Do not update the reading.
+            pass
+
+        # Return the reading (speed and saturation flag).
+        return self.reading
 
 
 #
