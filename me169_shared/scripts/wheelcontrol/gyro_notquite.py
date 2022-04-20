@@ -53,6 +53,9 @@ class Gyro:
         # sample at >=42Hz to avoid aliasing.
         self.writeReg(self.REG_CONFIG, 0x03)
 
+        # Wait 50ms to let the setup and filter change settle.
+        time.sleep(0.05)
+
         # Set the gyro scale (default 500 deg/sec).  Feel free to change.
         self.setscale(scale)
         
@@ -79,9 +82,9 @@ class Gyro:
         self.scale = math.radians(250.0) * (2 ** scalenum)
         self.writeReg(self.REG_GYROCFG, scalenum << 3)
 
-        # Let the change take effect.
+        # Let the change take effect before the next sample is read.
         time.sleep(0.01)
-        
+
         # Report.
         print("Setting gyro scale to %.3f rad/sec (%.0f deg/sec)"
               % (self.scale, math.degrees(self.scale)))
