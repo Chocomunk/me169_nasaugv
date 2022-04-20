@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF describes the ME/CS/EE 129 bot, -->
+<!-- with the front edge at the big wheels!    -->
+
+<robot name="bot">
+
+  <!-- Pick the colors -->
+  <material name="body">  <color rgba="0.79 0.82 0.93 1"/>  </material>
+  <material name="wheel"> <color rgba="0.39 0.41 0.46 1"/>  </material>
+
+  <!-- The base is the midpoint between the wheels on the ground -->
+  <link name="base"/>
+
+  <!-- Move up to the wheel axle (midway between the wheels) -->
+  <!-- This is where the body STL is anchored                -->
+  <joint name="basetoaxle" type="fixed">
+    <parent link="base"/>
+    <child  link="axle"/>
+    <origin xyz="0 0 0.03" rpy="0 0 0"/>
+  </joint>
+
+  <link name="axle">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh
+          filename="package://bot_description/meshes/body_front_wheels.stl" />
+      </geometry>
+      <material name="body"/>
+    </visual>
+  </link>
+
+  <!-- Left wheel -->
+  <joint name="leftwheeljoint" type="fixed">
+    <parent link="axle"/>
+    <child  link="leftwheel"/>
+    <origin xyz="0 0.065 0" rpy="-1.5708 0 0"/>
+  </joint>
+
+  <link name="leftwheel">
+    <visual>
+      <origin xyz="0 0 -0.01750" rpy="3.1416 0 0"/>
+      <geometry>
+        <mesh
+          filename="package://bot_description/meshes/wheel.stl" />
+      </geometry>
+      <material name="wheel"/>
+    </visual>
+  </link>
+
+  <!-- Right wheel -->
+  <joint name="rightwheeljoint" type="fixed">
+    <parent link="axle"/>
+    <child  link="rightwheel"/>
+    <origin xyz="0 -0.065 0" rpy="1.5708 0 0"/>
+  </joint>
+
+  <link name="rightwheel">
+    <visual>
+      <origin xyz="0 0 -0.01750" rpy="3.1416 0 0"/>
+      <geometry>
+        <mesh
+          filename="package://bot_description/meshes/wheel.stl" />
+      </geometry>
+      <material name="wheel"/>
+    </visual>
+  </link>
+
+  <!-- Camera Plate (frame on camera's front plate)      -->
+  <!-- The plate is  0.10183 in front of center of body, -->
+  <!--     which is -0.04875 behind      the wheel axle. -->
+  <!-- So shifted    0.05308 in front of the wheel axle. -->
+  <!-- Also Shifted  0.03633 above the wheel axle.       -->
+  <!-- And turned 17deg up!                              -->
+  <joint name="axletocameraplate" type="fixed">
+    <parent link="axle"/>
+    <child  link="cameraplate"/>
+    <origin xyz="0.05308 0 0.03633" rpy="0 -0.297 0"/>
+  </joint>
+
+  <link name="cameraplate"/>
+
+  <!-- Camera Origin (of Depth Camera, used by RealSense) -->
+  <!-- Shifted 17.5mm left, 4.2mm back                    -->
+  <joint name="camerainternaloffset" type="fixed">
+    <parent link="cameraplate"/>
+    <child  link="camera_link"/>
+    <origin xyz="-0.00420 0.01750 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="camera_link"/>
+
+  <!-- Laser scanner (placed at camera but horizontal) -->
+  <!-- Careful: the angle must match the 17deg above!  -->
+  <joint name="cameratolaser" type="fixed">
+    <parent link="camera_link"/>
+    <child  link="laser"/>
+    <origin xyz="0 0 0" rpy="0 0.297 0"/>
+  </joint>
+
+  <link name="laser"/>
+
+</robot>
