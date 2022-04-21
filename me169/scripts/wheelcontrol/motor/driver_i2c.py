@@ -84,11 +84,11 @@ class Driver:
         self.writeReg(self.REG_MOTORX[channel], value)
 
     def left(self, pwm):
-        pwm = min(max(pwm, -255.0), 255.0)
+        pwm = min(max(pwm, -254.0), 254.0)
         self.set_drive(self.chL, self.revL, int(pwm))
 
     def right(self, pwm):
-        pwm = min(max(pwm, -255.0), 255.0)
+        pwm = min(max(pwm, -254.0), 254.0)
         self.set_drive(self.chR, self.revR, int(pwm))
 
 
@@ -105,24 +105,24 @@ if __name__ == "__main__":
     # Try the left and right motors individually.
     print('Test left only positive = forward...');
     driver.left(110)
-    time.sleep(1.0)
+    time.sleep(2.0)
     driver.left(0)
 
     print('Test right only positive = backward...');
     driver.right(110)
-    time.sleep(1.0)
+    time.sleep(2.0)
     driver.right(0)
 
     # Try a simple move.
     print('Test driving forward...');
     driver.left(110)
     driver.right(-110)
-    time.sleep(1.0)
+    time.sleep(2.0)
 
     print('Test spinning right (negative Z)...');
     driver.left(110)
     driver.right(110)
-    time.sleep(1.0)
+    time.sleep(2.0)
 
     # Cleanup (disabling the motors).
     driver.shutdown()

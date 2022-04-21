@@ -27,8 +27,8 @@ from sensor_msgs.msg   import JointState
 #
 #   Constants
 #
-R = SOMETHING           # Wheel radius
-d = SOMETHING           # Halfwidth between wheels
+R = 3.257 # 3.17          # Wheel radius (cm)
+d = 6.2     # Halfwidth between wheels (cm)
 
 
 #
@@ -60,12 +60,14 @@ class OdometryObj:
 
 
     # Velocity Command Message Callback
-    def cb_vel_cmd(self, msg):
+    def cb_vel_cmd(self, msg: Twist):
         # Grab the forward and spin (velocity) commands.
+        v = msg.linear.x
+        w = msg.angular.z
 
-        CONVERT THE BODY VELOCITY COMMANDS TO L/R WHEEL COMMANDS
-        lpsi_dot = SOMETHING
-        rpsi_dot = SOMETHING
+        # CONVERT THE BODY VELOCITY COMMANDS TO L/R WHEEL COMMANDS
+        lpsi_dot = (v-d*w)/R
+        rpsi_dot = (v+d*w)/R
 
         # Create the wheel command msg and publish.  Note the incoming
         # message does not have a time stamp, so generate one here.
@@ -79,41 +81,42 @@ class OdometryObj:
     # Wheel State Message Callback
     def cb_wheel_state(self, msg):
         # Grab the timestamp, wheel and gyro position/velocities.
+        pass
 
-        lpsi = msg.position[msg.name.index('leftwheel')]
-
-        AND MORE
-
-
-
-        # Update the pose.
-        self.x    += dp * ...
-        self.y    += dp * ...
-        self.theta
-
-        # Convert to a ROS Point, Quaternion, Twist (lin&ang veloocity).
-        p = Point(self.x, self.y, 0.0)
-        q = Quaternion(0.0, 0.0, math.sin(self.theta/2), math.cos(self.theta/2))
-        t = Twist(Vector3(vx, 0.0, 0.0), Vector3(0.0, 0.0, wz))
-
-        # Create the odometry msg and publish (reuse the time stamp).
-        msg = Odometry()
-        msg.header.stamp            = timestamp
-        msg.header.frame_id         = 'odom'
-        msg.child_frame_id          = 'base'
-        msg.pose.pose.position      = p
-        msg.pose.pose.orientation   = q
-        msg.twist.twist             = t
-        self.pub_odom.publish(msg)
-
-        # Create the transform msg and broadcast (reuse the time stamp).
-        msg = TransformStamped()
-        msg.header.stamp            = timestamp
-        msg.header.frame_id         = 'odom'
-        msg.child_frame_id          = 'base'
-        msg.transform.translation   = p
-        msg.transform.rotation      = q
-        self.brd_tf.sendTransform(msg)
+#         lpsi = msg.position[msg.name.index('leftwheel')]
+# 
+#         AND MORE
+# 
+# 
+# 
+#         # Update the pose.
+#         self.x    += dp * ...
+#         self.y    += dp * ...
+#         self.theta
+# 
+#         # Convert to a ROS Point, Quaternion, Twist (lin&ang veloocity).
+#         p = Point(self.x, self.y, 0.0)
+#         q = Quaternion(0.0, 0.0, math.sin(self.theta/2), math.cos(self.theta/2))
+#         t = Twist(Vector3(vx, 0.0, 0.0), Vector3(0.0, 0.0, wz))
+# 
+#         # Create the odometry msg and publish (reuse the time stamp).
+#         msg = Odometry()
+#         msg.header.stamp            = timestamp
+#         msg.header.frame_id         = 'odom'
+#         msg.child_frame_id          = 'base'
+#         msg.pose.pose.position      = p
+#         msg.pose.pose.orientation   = q
+#         msg.twist.twist             = t
+#         self.pub_odom.publish(msg)
+# 
+#         # Create the transform msg and broadcast (reuse the time stamp).
+#         msg = TransformStamped()
+#         msg.header.stamp            = timestamp
+#         msg.header.frame_id         = 'odom'
+#         msg.child_frame_id          = 'base'
+#         msg.transform.translation   = p
+#         msg.transform.rotation      = q
+#         self.brd_tf.sendTransform(msg)
 
 
 #

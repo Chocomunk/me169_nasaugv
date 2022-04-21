@@ -136,7 +136,7 @@ class Gyro:
 
         # Scale into rad/sec.
         # Given the value and the full scale, can you determine:
-        omegaraw = value
+        omegaraw = (value / (1 << 15)) * self.scale
     
         # Return the speed and saturation flag.
         return (omegaraw, saturated)

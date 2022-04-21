@@ -8,8 +8,9 @@
 #   Publish:    /vel_cmd          sensor_msgs/JointState
 #   Subscribe:  -none-
 #
-import curses
 import sys
+import time
+import curses
 import rospy
 
 from geometry_msgs.msg import Twist
@@ -83,7 +84,7 @@ def loop(screen):
 
         # Report.
         if (key >= 0x20) and (key <= 0x80):
-            s = "'" + str(unichr(key)) + "'"
+            s = "'" + str(chr(key)) + "'"
         else:
             s = "%d" % key
         screen.addstr(8, 0, "Last pressed 0x%02x = %s" % (key, s))
@@ -141,6 +142,18 @@ if __name__ == "__main__":
         curses.wrapper(loop)
     except KeyboardInterrupt:
         pass
+
+    # start_t = rospy.Time.now()
+
+    # t = 2 * 3.1415 / wnom
+    # while (rospy.Time.now() - start_t).to_sec() < t:
+    #     # Update the message and publish.
+    #     msg.linear.x  = vnom
+    #     msg.angular.z = wnom
+    #     pub.publish(msg)
+
+    #     # Wait for the next turn.
+    #     servo.sleep()
 
     # Report the exit.
     rospy.loginfo("Stopping transmissions.")

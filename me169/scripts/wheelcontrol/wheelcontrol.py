@@ -17,49 +17,50 @@
 #   Other Inputs:   Encoder Channels (GPIO)
 #   Other Outputs:  Motor Driver Commands (via I2C)
 #
-import math
 import sys
 import time
+import math
 import rospy
 import smbus
 
+from gyro import Gyro
 from encoder import Encoder
 from motor.driver_i2c import Driver
 
 from sensor_msgs.msg import JointState
 
 
-# ----- Constants -----
-DT = 1. / 100       # 100 Hz
-
-# --------- Initialize global vars ----------
-
-
-
 class WheelControlObj:
+    """ 
+    Keeps track of drivers and state for a wheelcontrol node.
+    
+    Must be created AFTER the node is initialized
+    """
 
     # Physical constants
     GR = 2. * math.pi / 720     # 720 counts / full rotation
     plim = 3 * math.pi / 4      # p-error limit
     cumplim = math.pi / 3       # cumulative-p-error limit
 
-    # Filter Constants
-    ACTLAM = 1. / 0.05  # T = 0.05s,     Default: -1
-    DESLAM = 1. / 0.1   # T = 0.1s
-    CORLAM = 1. / 0.35   # T = 0.25s
+    # Filter Constants. Default: 1
+    ACTLAM = 1. / 0.05      # T = 0.05s
+    DESLAM = 1. / 0.1       # T = 0.1s
+    CORLAM = 1. / 0.35      # T = 0.25s
 
     # PID constants
     P = 50
     I = 50
     PWM_I = 0.5
 
-    def __init__(self, publish_desired, publish_actual,
+    def __init__(self, dt, publish_desired, publish_actual,
                 enc_chLA=24, enc_chLB=25, enc_chRA=23, enc_chRB=22,
                 drv_chL=0, drv_chR=1, drv_revL=1, drv_revR = 1):
+        """ Initializes a wheel controller """
         # Inititlize the low level.
         self.i2cbus = smbus.SMBus(1)
         self.encoder = Encoder(enc_chLA, enc_chLB, enc_chRA, enc_chRB)
         self.driver  = Driver(self.i2cbus, drv_chL, drv_chR, drv_revL, drv_revR)
+        self.gyro = Gyro(self.i2cbus)
 
         # Default values for params
         if self.ACTLAM < 0:
@@ -75,13 +76,14 @@ class WheelControlObj:
 
         # ---------- Initialize state variables ----------
         self.cmdvel = [0, 0]
-        self.cmdtime = 0
+        self.cmdtime = rospy.Time.now()
 
         # Actual state values
         self.lpos = 0
         self.rpos = 0
         self.lvel = 0
         self.rvel = 0
+        self.gyro_thetaz = 0
 
         # Desired state values
         self.deslpos = 0
@@ -97,6 +99,7 @@ class WheelControlObj:
         """ Clean up the low level. """
         self.driver.shutdown()
         self.encoder.shutdown()
+        self.gyro.shutdown()
 
     def pwm(self, vel):
         """ Map velocity into PWM """
@@ -105,7 +108,7 @@ class WheelControlObj:
         k = 22.4 * math.copysign(1, vel)
         return 9.6 * vel + k
 
-    def callback_command(self, msg):
+    def callback_command(self, msg: JointState):
         """
         Command Callback Function
 
@@ -126,7 +129,7 @@ class WheelControlObj:
         # Note the current time to compute dt and populate the ROS messages.
         now = rospy.Time.now()
 
-        # Process the commands.
+        # ---------- Process the commands ---------- 
         if (now - self.cmdtime).to_sec() > 0.25:
             lvelcmd, rvelcmd = 0, 0
         else:
@@ -139,6 +142,7 @@ class WheelControlObj:
         self.deslpos += self.deslvel * dt
         self.desrpos += self.desrvel * dt
 
+        # ---------- Process actual state ---------- 
         # Process the encoders, convert to wheel angles!
         lastlpos = self.lpos     # Save previous values
         lastrpos = self.rpos
@@ -150,6 +154,12 @@ class WheelControlObj:
         self.lvel = (1 - self.ACTLAM * dt) * self.lvel + self.ACTLAM * (self.lpos - lastlpos)
         self.rvel = (1 - self.ACTLAM * dt) * self.rvel + self.ACTLAM * (self.rpos - lastrpos)
 
+        # Read gyro and integrate heading
+        # TODO: Handle saturated
+        omega_z, _ = self.gyro.read()
+        self.gyro_thetaz += omega_z * dt
+
+        # ---------- Compute PWM ---------- 
         # Add corrective velocity to desired
         corrlvel = self.deslvel
         corrrvel = self.desrvel
@@ -172,13 +182,14 @@ class WheelControlObj:
         self.driver.left(pwml)
         self.driver.right(-pwmr)  # Might need to be negative
 
+        # ---------- Publish States ---------- 
         # Publish the actual wheel state
         msg = JointState()
         msg.header.stamp = now
-        msg.name         = ['leftwheel', 'rightwheel']
-        msg.position     = [self.lpos, self.rpos]
-        msg.velocity     = [self.lvel, self.rvel]
-        msg.effort       = [0.0, 0.0]
+        msg.name         = ['leftwheel', 'rightwheel', 'gyro']
+        msg.position     = [self.lpos, self.rpos, self.gyro_thetaz]
+        msg.velocity     = [self.lvel, self.rvel, omega_z]
+        msg.effort       = [0.0, 0.0, 0.0]
         self.publish_act.publish(msg)
 
         # Publish the desired wheel state
@@ -198,21 +209,22 @@ if __name__ == "__main__":
     # Initialize the ROS node.
     rospy.init_node('wheelcontrol')
 
+    # Define durations
+    duration = rospy.Duration(1. / 100)       # 100 Hz
+    dt       = duration.to_sec()
+
     # Create a publisher to send the wheel desired and actual (state).
     pubdes = rospy.Publisher('/wheel_desired', JointState, queue_size=10)
     pubact = rospy.Publisher('/wheel_state',   JointState, queue_size=10)
 
     # Initialize state and drivers
-    wheelcontrol = WheelControlObj(pubdes, pubact)
-    wheelcontrol.cmdtime = rospy.Time.now()
+    wheelcontrol = WheelControlObj(dt, pubdes, pubact)
 
     # Create a subscriber to listen to wheel commands.
     sub = rospy.Subscriber("/wheel_command", JointState, wheelcontrol.callback_command)
 
     # Create the timer.
-    duration = rospy.Duration(DT)
-    dt       = duration.to_sec()
-    timer    = rospy.Timer(duration, wheelcontrol.callback_timer)
+    timer = rospy.Timer(duration, wheelcontrol.callback_timer)
 
     # Spin while the callbacks are doing all the work.
     rospy.loginfo("Running with dt = %.3f sec..." % dt)
