@@ -1,0 +1,8 @@
+<launch>
+  <node name="wheel_controller"
+	pkg="me169"
+  	type="wheelcontrol.py"/>
+  <node name="odometry"
+	pkg="me169"
+  	type="odometry.py"/>
+</launch>
