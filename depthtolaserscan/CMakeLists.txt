@@ -36,7 +36,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context.
 ## Make sure the target names don't collide across packages.
 add_executable(depthtolaserscan src/depthtolaserscan.cpp)
-add_executable(depthtolaserscan2 src/depthtolaserscan2.cpp)
+#add_executable(depthtolaserscan2 src/depthtolaserscan2.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
@@ -44,4 +44,4 @@ add_executable(depthtolaserscan2 src/depthtolaserscan2.cpp)
 
 ## Specify libraries to link a executable target against
 target_link_libraries(depthtolaserscan ${catkin_LIBRARIES})
-target_link_libraries(depthtolaserscan2 ${catkin_LIBRARIES})
+#target_link_libraries(depthtolaserscan2 ${catkin_LIBRARIES})
