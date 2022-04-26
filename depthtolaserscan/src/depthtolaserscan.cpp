@@ -9,7 +9,6 @@
 **   Params:     ~ground_frame_id    Frame at ground level, with Z vertical up
 **               ~laser_frame_id     Frame for laser scan
 **                                   (x forward, Z vertical up, Y left)
-**               ~imagelag           Estimated delay image taken to received
 **               ~min_height         Min height for object to "be detected"
 **               ~max_height         Max height for object to "be detected"
 **               ~horz_samples       Number of laser scan samples
@@ -46,7 +45,7 @@ using namespace sensor_msgs;
 /*
 **   Constants
 */
-#define TIMEOUT     (10.0)	// Timeout for the initialization
+#define TIMEOUT     (60.0)	// Timeout for the initialization
 
 #define INFO_TOPIC  "/camera/depth/camera_info"
 #define IMAGE_TOPIC "/camera/depth/image_rect_raw"
@@ -62,7 +61,6 @@ using namespace sensor_msgs;
 #define RANGE_NOCONTACT  (5.000)	// Valid range is clear
 
 // Default Parameter Values
-#define IMAGELAG         (0.080)        // Time between image taken/received
 #define MINIMUM_CONTACTS (5.0)		// Minimum number of contacts/object
 #define SIMILAR_FRACTION (0.030)	// Range within 3% is the same object
 
@@ -80,8 +78,6 @@ unsigned int Nu, Nv;		// Width/Height (number of pixels)
 
 double cu, cv;			// Image Center (in pixels)
 double fu, fv;			// Focal length (in pixels)
-
-double imagelag;		// Estimated delay image taken to received
 
 // Pose parameters.
 double pitch;			// Camera pitched up angle
@@ -210,8 +206,6 @@ void grabParameters()
   node_private.param<std::string>("ground_frame_id", groundframe, "base");
   node_private.param<std::string>("laser_frame_id",  laserframe,  "laser");
 
-  node_private.param("image_lag", imagelag, IMAGELAG);
-
   node_private.param("min_height", hmin, 0.030);
   node_private.param("max_height", hmax, 0.250);
 
@@ -237,11 +231,19 @@ int grabCameraInfo()
   ROS_INFO("Getting depth camera info...");
 
   // Grab a single message of the camera_info topic.
+  Time tbefore = Time::now();
   msgp = topic::waitForMessage<CameraInfo>(INFO_TOPIC, Duration(TIMEOUT));
+  Time tafter  = Time::now();
   if (msgp == NULL)
     {
-      ROS_ERROR("Unable to read the depth camera's info!");
+      ROS_ERROR("Unable to read the depth camera's info in %5.1fsec!",
+		TIMEOUT);
       return -1;
+    }
+  else
+    {
+      ROS_INFO("Received depth camera info after %5.1fsec",
+	       (tafter - tbefore).toSec());
     }
 
   // Save the image frame ID.
@@ -329,7 +331,6 @@ int grabCameraPose()
   ROS_INFO("The depth camera is pitched up %6.3fdeg (%4.3frad)",
 	   pitch * 180.0/M_PI, pitch);
 
-  ROS_INFO("Estimated delay image taken to received %5.3fsec", imagelag);
   ROS_INFO("Quadratic correction factor %9.6f", correction);
   ROS_INFO("Required at least %d contacts per object", (int) min_contacts);
   ROS_INFO("Same object if range is +/- %4.1f%%", sim_fraction * 100.0);
@@ -543,15 +544,15 @@ int prepareSampling()
 */
 void callback_image(const Image::ConstPtr& imagemsgp)
 {
-  // Record the estimated image time, relative to the arrival time.
-  // The imagemsg timestamp *should* tell us when the underlying data
-  // was sampled, but the RealSense timestamps are incorrect.  So this
-  // is our best guess.
-  Time timestamp = Time::now() - Duration(imagelag);
-
-  // Report (for debugging).
-  // ROS_INFO("Image #%4d at %10d secs",
-  //          imagemsgp->header.seq, imagemsgp->header.stamp.sec);
+  // // Report the timing (for debugging).
+  // Time now = Time::now();
+  // ROS_INFO("Image #%4d at %10d.%09d secs. Now %10d.%09d, diff = %5.3fs",
+  //          imagemsgp->header.seq,
+  // 	   imagemsgp->header.stamp.sec,
+  // 	   imagemsgp->header.stamp.nsec,
+  // 	   now.sec,
+  // 	   now.nsec,
+  // 	   (now - imagemsgp->header.stamp).toSec());
 
   // Check the image width/height.
   if ((imagemsgp->width != Nu) || (imagemsgp->height != Nv))
@@ -640,8 +641,8 @@ void callback_image(const Image::ConstPtr& imagemsgp)
       else                            scanmsg.ranges[iangle] = RANGE_BAD;
     }
 
-  // Update the mssage and publish.  Note the depth camera time is bad!
-  scanmsg.header.stamp = timestamp;
+  // Update the mssage and publish.  Use the depth camera time!
+  scanmsg.header.stamp = imagemsgp->header.stamp;
   scanpub.publish(scanmsg);
 }
 

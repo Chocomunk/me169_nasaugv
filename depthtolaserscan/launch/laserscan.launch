@@ -13,33 +13,35 @@
   <param name="robot_description" textfile="$(arg model)"/>
 
 
-  <!-- Start the RealSense.  I'm not enabling the pointcloud. -->
-  <!-- A resolution of (-1) implies using the default value.  -->
+  <!-- Start the RealSense. This is *not* enabling the pointcloud -->
+  <!-- and running the depth/color at 15Hz to lower the load.     -->
+  <!-- The default image settings are: -->
+  <!--   Depth  848 x 480 @ 30Hz       -->
+  <!--   Color  640 x 480 @ 30Hz       -->
   <include file="$(find realsense2_camera)/launch/rs_camera.launch">
-    <arg name="depth_width"       value="-1"/>
-    <arg name="depth_height"      value="-1"/>
-    <arg name="depth_fps"         value="30"/>
+    <arg name="depth_width"       value="848"/>
+    <arg name="depth_height"      value="480"/>
+    <arg name="depth_fps"         value="15"/>
 
-    <arg name="color_width"       value="-1"/>
-    <arg name="color_height"      value="-1"/>
-    <arg name="color_fps"         value="30"/>
+    <arg name="color_width"       value="640"/>
+    <arg name="color_height"      value="480"/>
+    <arg name="color_fps"         value="15"/>
 
     <arg name="enable_pointcloud"        value="false"/>
     <arg name="allow_no_texture_points"  value="true"/>
+
     <!-- Replace RS2_STREAM_COLOR with RS_STREAM_ANY to -->
     <!-- create the pointcloud without the RGB colors.  -->
     <arg name="pointcloud_texture_stream" default="RS2_STREAM_COLOR"/>
   </include>
 
-  <!-- Start the depth image to laser scan conversion.  -->
-  <!-- Note I'm *NOT* using python, it is a LOT slower. -->
+  <!-- Start the depth image to laser scan conversion. -->
   <node name="depthtolaserscan"
 	pkg ="depthtolaserscan"
   	type="depthtolaserscan"
 	output="screen">
     <param name="min_height"  value="0.030"/>
     <param name="max_height"  value="0.250"/>
-    <param name="image_lag"   value="0.080"/>
     <param name="correction"  value="0.000056"/>
     <param name="horzsamples" value="-1"/>   <!-- -1 = imagewidth/2  = 424 -->
     <param name="vertsamples" value="-1"/>   <!-- -1 = imageheight/2 = 240 -->
