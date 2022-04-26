@@ -1,0 +1,52 @@
+<launch>
+  <!-- Show the RealSense pointcloud on top of the odometry. -->
+
+  <!-- URDF parameter. -->
+  <arg name="urdf"  default="bot.urdf"/>
+  <arg name="model" default="$(find bot_description)/urdf/$(arg urdf)"/>
+
+  <!-- Rviz configuration file parameter. -->
+  <arg name="cfg"   default="$(find depthtolaserscan)/rviz/pointcloud.rviz"/>
+
+
+  <!-- Load the URDF file into the robot_description parameter. -->
+  <param name="robot_description" textfile="$(arg model)"/>
+
+
+  <!-- Start the RealSense.  Enable/publish the pointcloud! -->
+  <!-- This adds significant load, so run at 6Hz!           -->
+  <!-- The default image settings are: -->
+  <!--   Depth  848 x 480 @ 30Hz       -->
+  <!--   Color  640 x 480 @ 30Hz       -->
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="depth_width"       value="640"/>
+    <arg name="depth_height"      value="480"/>
+    <arg name="depth_fps"         value="6"/>
+
+    <arg name="color_width"       value="640"/>
+    <arg name="color_height"      value="480"/>
+    <arg name="color_fps"         value="6"/>
+
+    <arg name="enable_pointcloud"        value="true"/>
+    <arg name="allow_no_texture_points"  value="true"/>
+
+    <!-- Replace RS2_STREAM_COLOR with RS_STREAM_ANY to -->
+    <!-- create the pointcloud without the RGB colors.  -->
+    <arg name="pointcloud_texture_stream" default="RS2_STREAM_COLOR"/>
+  </include>
+
+
+  <!-- Publish all the robot frames. -->
+  <node name="robot_state_publisher"
+	pkg="robot_state_publisher"
+  	type="robot_state_publisher"/>
+
+  <!-- Run the rviz visualization, with the specified config file -->
+  <!-- Kill everything if this stops. -->
+  <node pkg="rviz"
+  	type="rviz"
+	name="rviz"
+	args="-d $(arg cfg)"
+	output="screen"
+	required="true"/>
+</launch>
