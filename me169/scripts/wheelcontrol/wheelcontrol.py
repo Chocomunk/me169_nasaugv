@@ -48,8 +48,8 @@ class WheelControlObj:
     CORLAM = 1. / 0.35      # T = 0.25s
 
     # PID constants
-    P = 50
-    I = 50
+    P = 10
+    I = 25
     PWM_I = 0.5 * 9.6
 
     def __init__(self, dt, publish_desired, publish_actual,
@@ -174,9 +174,21 @@ class WheelControlObj:
         self.cumlperr += min(self.cumplim, max(lperr * dt, -self.cumplim))
         self.cumrperr += min(self.cumplim, max(rperr * dt, -self.cumplim))
 
+        # corrlvel = self.deslvel + self.CORLAM * lperr
+        # corrrvel = self.desrvel + self.CORLAM * rperr
+
+        # self.cumlperr += corrlvel * dt
+        # self.cumrperr += corrrvel * dt
+
         # Generate motor commands (convert wheel speed to PWM with PID)
-        pwml = self.pwm(corrlvel + self.CORLAM * lperr) + self.PWM_I * self.cumlperr
-        pwmr = self.pwm(corrrvel + self.CORLAM * rperr) + self.PWM_I * self.cumrperr
+        # pwml = self.pwm(corrlvel + self.CORLAM * lperr) + self.PWM_I * self.cumlperr
+        # pwmr = self.pwm(corrrvel + self.CORLAM * rperr) + self.PWM_I * self.cumrperr
+
+        pwml = self.pwm(corrlvel + self.CORLAM * lperr)
+        pwmr = self.pwm(corrrvel + self.CORLAM * rperr)
+
+        # pwml = self.P * corrlvel + self.I * self.cumlperr
+        # pwmr = self.P * corrrvel + self.I * self.cumrperr
 
         # Send wheel commands.
         self.driver.left(pwml)
