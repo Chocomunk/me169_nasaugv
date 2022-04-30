@@ -9,16 +9,15 @@
 #   Publish:    /vel_cmd                geometry_msgs/Twist
 #   Subscribe:  /odom                   geometry_msgs/TransJointState
 #               /move_base_simple/goal  geometry_msgs/PoseStamped
+#               /scan                   sensor_msgs/LaserScan
 #
 import math
-from tkinter import FALSE
 import rospy
-import tf2_ros
+import numpy as np
 
-from geometry_msgs.msg import Point, Quaternion, Twist
-from geometry_msgs.msg import TransformStamped, Vector3, PoseStamped
-from nav_msgs.msg      import Odometry
-from sensor_msgs.msg   import JointState
+from geometry_msgs.msg  import PoseStamped, Twist
+from nav_msgs.msg       import Odometry
+from sensor_msgs.msg    import LaserScan
 
 
 LAM_TURN = 1 / 0.7      # time constant multiplier for the angular speed (hz)
@@ -28,12 +27,25 @@ VEL_TOL = 0.4               # (m/s)
 THETA_TOL = math.pi/12.     # (radians)
 OMEGA_LIM = math.pi/3.      # (rad/s)
 TURN_DELAY = 0.25           # (sec)
+SCAN_ANGLE = math.pi/3      # (radians)
+WALL_THRESH = 0.3           # (meters)
 
 
 def angle_diff(angle1, angle2):
     """This function finds the smallest angle difference between
     angle1 and angle2"""
     return (angle1-angle2) - 2.0*math.pi * round(0.5*(angle1-angle2)/math.pi)
+
+
+def closest_scan(scan: LaserScan, angle_range=SCAN_ANGLE):
+    """This function returns the float value of the minimum laser scan in the specified angle range."""
+    offset_l = -int((scan.angle_min + angle_range/2) / scan.angle_increment)
+    offset_r =  int((scan.angle_max - angle_range/2) / scan.angle_increment)
+    start_index = max(0, offset_l)
+    end_index = len(scan.ranges) - max(0, offset_r)
+    clamped_range = np.array(scan.ranges[start_index:end_index+1])
+    nonzero = clamped_range[clamped_range > 0]
+    return 0 if len(nonzero) == 0 else np.min(nonzero)   
 
 
 class DriveTurn:
@@ -46,7 +58,7 @@ class DriveTurn:
     def reset(self):
         self.finished = False
 
-    def update(self, odom: Odometry, nav_goal: PoseStamped):
+    def update(self, odom: Odometry, nav_goal: PoseStamped, scan: LaserScan):
         # Find current angle
         cur_q = odom.pose.pose.orientation
         cur_th = 2*math.atan2(cur_q.z, cur_q.w)
@@ -80,9 +92,13 @@ class DriveTurn:
             adiff = angle_diff(goal_th, cur_th)
 
             # Compute desired velocity and omega
-            vd = LAM_FORW * dist
-            vd = min(VEL_TOL, max(-VEL_TOL, vd))    # Clamp
-            vx = vd * math.cos(adiff)
+            clos = closest_scan(scan)
+            print(clos)
+            if clos > WALL_THRESH:
+                print("ABLE TO MOVE")
+                vd = LAM_FORW * dist
+                vd = min(VEL_TOL, max(-VEL_TOL, vd))    # Clamp
+                vx = vd * max(0, math.cos(adiff))
 
         # Compute rotating speed
         wz = LAM_TURN * adiff
@@ -172,6 +188,7 @@ class LocalDriver:
         self.last_odom = Odometry()
         self.nav_goal = PoseStamped()
         self.controller = DriveTurn()
+        self.last_scan = LaserScan()
 
         # Create a publisher to send velocity commands.
         self.pub_vcmd = rospy.Publisher('/vel_cmd', Twist,
@@ -183,6 +200,9 @@ class LocalDriver:
         # Create a subscriber to listen to navigation goal.
         rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.cb_nav_goal)
 
+        # Create a subscriber to listen to the lase scan.
+        rospy.Subscriber('/scan', LaserScan, self.cb_laser)
+
     def cb_nav_goal(self, msg: PoseStamped):
         self.nav_goal = msg
         self.controller.reset()
@@ -190,10 +210,13 @@ class LocalDriver:
     def cb_odom(self, msg: Odometry):
         self.last_odom = msg
 
+    def cb_laser(self, msg: LaserScan):
+        self.last_scan = msg
+
     def cb_timer(self, event):
         if not self.controller.finished:
             # vx, wz, self.reached_goal = drive_turn(self.last_odom, self.nav_goal)
-            vx, wz = self.controller.update(self.last_odom, self.nav_goal)
+            vx, wz = self.controller.update(self.last_odom, self.nav_goal, self.last_scan)
 
             # Publish velocity commands
             msg = Twist()

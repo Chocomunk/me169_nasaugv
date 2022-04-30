@@ -1,5 +1,4 @@
 <launch>
-  <include file="$(find me169_shared)/launch/viewodometry.launch" />
-  
   <include file="$(find me169)/launch/robot.launch" />
+  <include file="$(find depthtolaserscan)/launch/laserscan.launch" />
 </launch>
