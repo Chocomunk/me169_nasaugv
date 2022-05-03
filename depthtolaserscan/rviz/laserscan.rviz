@@ -6,6 +6,8 @@ Panels:
       Expanded:
         - /Global Options1
         - /RobotModel1/Links1
+        - /Odometry1
+        - /Odometry1/Shape1
       Splitter Ratio: 0.5
     Tree Height: 344
   - Class: rviz/Selection
@@ -125,7 +127,7 @@ Visualization Manager:
         Alpha: 1
         Axes Length: 1
         Axes Radius: 0.10000000149011612
-        Color: 255; 25; 0
+        Color: 255; 205; 255
         Head Length: 0.029999999329447746
         Head Radius: 0.019999999552965164
         Shaft Length: 0.10000000149011612
@@ -222,7 +224,7 @@ Visualization Manager:
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: base
+    Fixed Frame: odom
     Frame Rate: 15
   Name: root
   Tools:
@@ -255,7 +257,7 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 150
+      Scale: 132
       Target Frame: <Fixed Frame>
       X: 0
       Y: 0
@@ -304,5 +306,5 @@ Window Geometry:
   Views:
     collapsed: true
   Width: 1280
-  X: 0
-  Y: 20
+  X: -2
+  Y: -4

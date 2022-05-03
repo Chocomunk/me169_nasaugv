@@ -45,7 +45,7 @@ def closest_scan(scan: LaserScan, angle_range=SCAN_ANGLE):
     end_index = len(scan.ranges) - max(0, offset_r)
     clamped_range = np.array(scan.ranges[start_index:end_index+1])
     nonzero = clamped_range[clamped_range > 0]
-    return 0 if len(nonzero) == 0 else np.min(nonzero)   
+    return 0 if len(nonzero) == 0 else np.min(nonzero)
 
 
 class DriveTurn:
@@ -92,10 +92,7 @@ class DriveTurn:
             adiff = angle_diff(goal_th, cur_th)
 
             # Compute desired velocity and omega
-            clos = closest_scan(scan)
-            print(clos)
-            if clos > WALL_THRESH:
-                print("ABLE TO MOVE")
+            if closest_scan(scan) > WALL_THRESH:
                 vd = LAM_FORW * dist
                 vd = min(VEL_TOL, max(-VEL_TOL, vd))    # Clamp
                 vx = vd * max(0, math.cos(adiff))
