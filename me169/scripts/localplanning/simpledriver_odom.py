@@ -7,7 +7,7 @@
 #
 #   Node:       /local_driver
 #   Publish:    /vel_cmd                geometry_msgs/Twist
-#   Subscribe:  /pose                   geometry_msgs/PoseStamped
+#   Subscribe:  /odom                   geometry_msgs/TransJointState
 #               /move_base_simple/goal  geometry_msgs/PoseStamped
 #               /scan                   sensor_msgs/LaserScan
 #
@@ -16,6 +16,7 @@ import rospy
 import numpy as np
 
 from geometry_msgs.msg  import PoseStamped, Twist
+from nav_msgs.msg       import Odometry
 from sensor_msgs.msg    import LaserScan
 
 
@@ -57,14 +58,14 @@ class DriveTurn:
     def reset(self):
         self.finished = False
 
-    def update(self, pose: PoseStamped, nav_goal: PoseStamped, scan: LaserScan):
+    def update(self, odom: Odometry, nav_goal: PoseStamped, scan: LaserScan):
         # Find current angle
-        cur_q = pose.pose.orientation
+        cur_q = odom.pose.pose.orientation
         cur_th = 2*math.atan2(cur_q.z, cur_q.w)
 
         # Find heading angle to goal
-        cur_px = pose.pose.position.x
-        cur_py = pose.pose.position.y
+        cur_px = odom.pose.pose.position.x
+        cur_py = odom.pose.pose.position.y
         goal_px = nav_goal.pose.position.x
         goal_py = nav_goal.pose.position.y
         dx = goal_px - cur_px
@@ -117,14 +118,14 @@ class TurnDriveTurn:
         self.at_goal = False
         self.finished = False
 
-    def update(self, pose: PoseStamped, nav_goal: PoseStamped):
+    def update(self, odom: Odometry, nav_goal: PoseStamped):
         # Find current angle
-        cur_q = pose.pose.orientation
+        cur_q = odom.pose.pose.orientation
         cur_th = 2*math.atan2(cur_q.z, cur_q.w)
 
         # Find heading angle to goal
-        cur_px = pose.pose.position.x
-        cur_py = pose.pose.position.y
+        cur_px = odom.pose.pose.position.x
+        cur_py = odom.pose.pose.position.y
         goal_px = nav_goal.pose.position.x
         goal_py = nav_goal.pose.position.y
         dx = goal_px - cur_px
@@ -181,7 +182,7 @@ class LocalDriver:
     # Initialize.
     def __init__(self):
         # Define Variables
-        self.last_pose = PoseStamped()
+        self.last_odom = Odometry()
         self.nav_goal = PoseStamped()
         self.controller = DriveTurn()
         self.last_scan = LaserScan()
@@ -190,8 +191,8 @@ class LocalDriver:
         self.pub_vcmd = rospy.Publisher('/vel_cmd', Twist,
                                         queue_size=10)
 
-        # Create a subscriber to listen to map pose.
-        rospy.Subscriber('/pose', PoseStamped, self.cb_pose)
+        # Create a subscriber to listen to odometry.
+        rospy.Subscriber('/odom', Odometry, self.cb_odom)
 
         # Create a subscriber to listen to navigation goal.
         rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.cb_nav_goal)
@@ -203,15 +204,16 @@ class LocalDriver:
         self.nav_goal = msg
         self.controller.reset()
 
-    def cb_pose(self, msg: PoseStamped):
-        self.last_pose = msg
+    def cb_odom(self, msg: Odometry):
+        self.last_odom = msg
 
     def cb_laser(self, msg: LaserScan):
         self.last_scan = msg
 
     def cb_timer(self, event):
         if not self.controller.finished:
-            vx, wz = self.controller.update(self.last_pose, self.nav_goal, self.last_scan)
+            # vx, wz, self.reached_goal = drive_turn(self.last_odom, self.nav_goal)
+            vx, wz = self.controller.update(self.last_odom, self.nav_goal, self.last_scan)
 
             # Publish velocity commands
             msg = Twist()
@@ -236,7 +238,7 @@ if __name__ == "__main__":
     duration = rospy.Duration(1. / 10)       # 10 Hz
     dt       = duration.to_sec()
 
-    # Instantiate the Local Driver object
+    # Instantiate the Odometry object
     local_driver = LocalDriver()
 
     # Create the timer.

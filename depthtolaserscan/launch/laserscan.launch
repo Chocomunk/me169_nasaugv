@@ -38,7 +38,7 @@
   <!-- Start the depth image to laser scan conversion. -->
   <node name="depthtolaserscan"
 	pkg ="depthtolaserscan"
-  	type="depthtolaserscan"
+  	type="depthtolaserscan2"
 	output="screen">
     <param name="min_height"  value="0.030"/>
     <param name="max_height"  value="0.250"/>

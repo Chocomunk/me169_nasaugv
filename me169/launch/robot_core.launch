@@ -1,11 +1,23 @@
 <launch>
+	<!-- Map Yaml File. -->
+	<arg name="map" default="$(find me169_shared)/maps/keck308corner.yaml"/>
+
+	<!-- Start the map server -->
+	<node name="map_server"
+		pkg ="map_server"
+		type="map_server"
+		args="$(arg map)"/>
+
   <node name="wheel_controller"
 	pkg="me169"
   	type="wheelcontrol.py"/>
   <node name="odometry"
 	pkg="me169"
   	type="odometry.py"/>
-  <node name="simpledriver"
+  <!-- <node name="simpledriver"
 	pkg="me169"
-  	type="simpledriver.py"/>
+  	type="simpledriver.py"/> -->
+  <!-- <node name="localization"
+	pkg="me169"
+  	type="localization.py"/> -->
 </launch>
