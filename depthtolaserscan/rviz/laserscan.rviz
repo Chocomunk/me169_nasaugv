@@ -4,7 +4,6 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Global Options1
         - /RobotModel1/Links1
         - /Odometry1/Shape1
       Splitter Ratio: 0.5
@@ -27,7 +26,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: LaserScan
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -126,7 +125,7 @@ Visualization Manager:
         Alpha: 1
         Axes Length: 1
         Axes Radius: 0.10000000149011612
-        Color: 255; 205; 255
+        Color: 55; 205; 55
         Head Length: 0.029999999329447746
         Head Radius: 0.019999999552965164
         Shaft Length: 0.10000000149011612
@@ -144,6 +143,14 @@ Visualization Manager:
           Value: true
         base:
           Value: true
+        camera_color_frame:
+          Value: true
+        camera_color_optical_frame:
+          Value: true
+        camera_depth_frame:
+          Value: true
+        camera_depth_optical_frame:
+          Value: true
         camera_link:
           Value: true
         cameraplate:
@@ -151,6 +158,8 @@ Visualization Manager:
         laser:
           Value: true
         leftwheel:
+          Value: true
+        map:
           Value: true
         odom:
           Value: true
@@ -163,7 +172,23 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        {}
+        map:
+          odom:
+            base:
+              axle:
+                cameraplate:
+                  camera_link:
+                    camera_color_frame:
+                      camera_color_optical_frame:
+                        {}
+                    camera_depth_frame:
+                      camera_depth_optical_frame:
+                        laser:
+                          {}
+                leftwheel:
+                  {}
+                rightwheel:
+                  {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -233,7 +258,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0
+      Angle: -0.004999999888241291
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -243,7 +268,7 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 30.527137756347656
+      Scale: 78.73209381103516
       Target Frame: <Fixed Frame>
       X: 0
       Y: 0

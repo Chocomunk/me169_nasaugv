@@ -64,14 +64,30 @@ class Localization:
 
         self.correction = IdentityCorrection(self.mapmsg)
 
+        # -------------------- TF Broadcasters/Listeners --------------------
+
+        # First create a TF2 listener. This implicily fills a local
+        # buffer, so we can always retrive the transforms we want.
+        self.tfBuffer = tf2_ros.Buffer()
+        self.tflisten = tf2_ros.TransformListener(self.tfBuffer)
+
+        # TF broadcaster for map2odom
+        self.brd_tf = tf2_ros.TransformBroadcaster()
+
+        # Give the broadcaster time to connect, then send the initial transform.
+        rospy.sleep(0.25)
+        tfmsg = TransformStamped()
+        tfmsg.header.stamp = rospy.Time.now()
+        tfmsg.header.frame_id = "map"
+        tfmsg.child_frame_id = "odom"
+        tfmsg.transform = PlanarTransform.unity().toTransform()
+        self.brd_tf.sendTransform(tfmsg)
+
         # -------------------- Publishers/Subscribers --------------------
 
         # Create a publisher to map space pose.
         self.pub_pose = rospy.Publisher('/pose', PoseStamped,
                                         queue_size=10)
-
-        # TF broadcaster for map2odom
-        self.brd_tf = tf2_ros.TransformBroadcaster()
 
         # Create a subscriber to listen to odometry.
         rospy.Subscriber('/odom', Odometry, self.cb_odom)
@@ -83,7 +99,7 @@ class Localization:
         rospy.Subscriber('/scan', LaserScan, self.cb_laser)
 
     def cb_init_pose(self, msg: PoseWithCovarianceStamped):
-        assert (msg.header.frame_id == "map")
+        assert (msg.header.frame_id == "map"), "Init pose not in map frame"
         self.init_pose = msg
 
         # Update map transforms to reflect the new map pose
@@ -93,6 +109,16 @@ class Localization:
     def cb_laser(self, msg: LaserScan):
         self.last_scan = msg
 
+        # Get odom2laser
+        # Assume we received a scan message (scanmsg). Use TF to
+        # look up the matching transform. Give it up to 100ms, in
+        # case Linux has (temporarily) swapped out the odometry node.
+        tfmsg = self.tfBuffer.lookup_transform("odom",
+            msg.header.frame_id,
+            msg.header.stamp,
+            rospy.Duration(0.1))
+        odom2laser = PlanarTransform.fromTransform(tfmsg.transform)
+
         # NOTE: this is subject to change
         self.correction.update(self.last_odom, msg)
 
@@ -101,12 +127,12 @@ class Localization:
 
         # Create the transform msg and broadcast (reuse the time stamp).
         # NOTE: we broadcast for every /odom, but only update for each /initialpose
-        msg = TransformStamped()
-        msg.header.stamp            = msg.header.stamp
-        msg.header.frame_id         = 'map'
-        msg.child_frame_id          = 'odom'
-        msg.transform               = self.map2odom.toTransform()
-        self.brd_tf.sendTransform(msg)
+        tf_msg = TransformStamped()
+        tf_msg.header.stamp         = msg.header.stamp
+        tf_msg.header.frame_id      = 'map'
+        tf_msg.child_frame_id       = 'odom'
+        tf_msg.transform            = self.map2odom.toTransform()
+        self.brd_tf.sendTransform(tf_msg)
 
         # Compute map2base pose corresponding to the odom2base reading
         self.odom2base = PlanarTransform.fromPose(msg.pose.pose)

@@ -200,6 +200,7 @@ class LocalDriver:
         rospy.Subscriber('/scan', LaserScan, self.cb_laser)
 
     def cb_nav_goal(self, msg: PoseStamped):
+        assert (msg.header.frame_id == "map"), "Nav goal not in map frame"
         self.nav_goal = msg
         self.controller.reset()
 
