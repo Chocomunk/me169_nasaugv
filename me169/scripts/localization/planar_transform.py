@@ -28,6 +28,7 @@
 #     theta = pt.theta()                Compute theta
 #
 import math
+import numpy as np
 
 from geometry_msgs.msg import Point
 from geometry_msgs.msg import Vector3
@@ -53,6 +54,12 @@ class PlanarTransform:
         return (self.px + self.cos() * x - self.sin() * y,
                 self.py + self.sin() * x + self.cos() * y)
 
+    def apply(self, pts):
+        g_o = np.array([self.px, self.py])
+        c, s = self.cos(), self.sin()
+        rotmat = np.array([[c, -s], [s, c]])
+        return g_o + pts @ rotmat.T
+        
     def __mul__(self, next):
         (x,y) = self.inParent(next.px, next.py)
         return PlanarTransform(x, y,

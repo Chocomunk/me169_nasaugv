@@ -20,7 +20,7 @@ from sensor_msgs.msg    import LaserScan
 
 
 LAM_TURN = 1 / 0.7      # time constant multiplier for the angular speed (hz)
-LAM_FORW = 1 / 0.5      # timst contant multiplier for forward speed (hz)
+LAM_FORW = 1 / 1      # timst contant multiplier for forward speed (hz)
 POS_TOL = 0.05              # (meters)
 VEL_TOL = 0.4               # (m/s)
 THETA_TOL = math.pi/12.     # (radians)

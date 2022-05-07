@@ -23,11 +23,15 @@
     <arg name="depth_height"      value="480"/>
     <arg name="depth_fps"         value="15"/>
 
-    <arg name="color_width"       value="640"/>
+    <!-- <arg name="color_width"       value="640"/>
     <arg name="color_height"      value="480"/>
-    <arg name="color_fps"         value="15"/>
+    <arg name="color_fps"         value="15"/> -->
 
+
+    <arg name="enable_infra"             value="false"/>
+    <arg name="enable_color"             value="false"/>
     <arg name="enable_pointcloud"        value="false"/>
+    <arg name="initial_reset"            value="true"/>
     <arg name="allow_no_texture_points"  value="true"/>
 
     <!-- Replace RS2_STREAM_COLOR with RS_STREAM_ANY to -->

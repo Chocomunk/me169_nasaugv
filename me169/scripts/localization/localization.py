@@ -16,31 +16,25 @@ import rospy
 import tf2_ros
 import numpy as np
 
-from geometry_msgs.msg  import PoseStamped, Pose, TransformStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg  import PoseStamped, TransformStamped, PoseWithCovarianceStamped, Point
 from nav_msgs.msg       import Odometry, OccupancyGrid
+from visualization_msgs.msg import Marker
 from sensor_msgs.msg    import LaserScan
 
-from PlanarTransform import PlanarTransform
+from planar_transform import PlanarTransform
+from corrections import IdentityCorrection, BasicLeastSquaresCorrection
 
 
-# CONSTANTS
+MAX_DIST_FROM_ROBOT = 3
 
-#
-#   Localization Correction
-#
-class IdentityCorrection:
-    # Initialize.
-    def __init__(self, map: OccupancyGrid):
-        self.map = map      # Not needed, but store for reference
-        self.identity_tf = PlanarTransform.basic(0, 0, 0)
 
-    def get_tf(self):
-        return self.identity_tf
-    
-    def update(self, last_odom: Odometry, last_scan: LaserScan):
-        # Do nothing for now, keep returning the identity transform
-        pass
-
+def laser2cart(scan: LaserScan):
+    r = np.array(scan.ranges) / 1.14
+    t = np.linspace(scan.angle_min, scan.angle_max, len(r))
+    idxs = np.where(r < MAX_DIST_FROM_ROBOT)
+    r = r[idxs, None]
+    t = t[idxs]
+    return r * np.array((np.cos(t), np.sin(t))).T
 
 #
 #   Localization Object
@@ -61,8 +55,10 @@ class Localization:
         self.map2base = PlanarTransform.basic(0, 0, 0)
         self.map2odom = PlanarTransform.basic(0, 0, 0)
         self.odom2base = PlanarTransform.basic(0, 0, 0)
+        self.odom2laser = PlanarTransform.basic(0, 0, 0)
 
-        self.correction = IdentityCorrection(self.mapmsg)
+        self.correction = BasicLeastSquaresCorrection(self.mapmsg)
+        # self.correction = IdentityCorrection(self.mapmsg)
 
         # -------------------- TF Broadcasters/Listeners --------------------
 
@@ -87,6 +83,8 @@ class Localization:
 
         # Create a publisher to map space pose.
         self.pub_pose = rospy.Publisher('/pose', PoseStamped,
+                                        queue_size=10)
+        self.pub_lasmap = rospy.Publisher('/lasermap', Marker,
                                         queue_size=10)
 
         # Create a subscriber to listen to odometry.
@@ -114,13 +112,21 @@ class Localization:
         # look up the matching transform. Give it up to 100ms, in
         # case Linux has (temporarily) swapped out the odometry node.
         tfmsg = self.tfBuffer.lookup_transform("odom",
-            msg.header.frame_id,
-            msg.header.stamp,
+            self.last_scan.header.frame_id,
+            self.last_scan.header.stamp,
+            # "laser",
+            # rospy.Time(0),
             rospy.Duration(0.1))
-        odom2laser = PlanarTransform.fromTransform(tfmsg.transform)
+        self.odom2laser = PlanarTransform.fromTransform(tfmsg.transform)
 
-        # NOTE: this is subject to change
-        self.correction.update(self.last_odom, msg)
+        map2laser = self.map2odom * self.odom2laser
+        laserpts = laser2cart(self.last_scan)
+        laser_map = map2laser.apply(laserpts)
+
+        laser_inrange = self.correction.update(laser_map)
+        self.pub_laser_map(laser_inrange, msg)
+
+        self.map2odom = self.correction.get_tf() * self.map2odom
 
     def cb_odom(self, msg: Odometry):
         self.last_odom = msg
@@ -136,13 +142,40 @@ class Localization:
 
         # Compute map2base pose corresponding to the odom2base reading
         self.odom2base = PlanarTransform.fromPose(msg.pose.pose)
-        pose_tf = self.correction.get_tf() * self.map2odom * self.odom2base
+        pose_tf = self.map2odom * self.odom2base
 
         # Publish new map2base pose
         pose_stamped = PoseStamped()
         pose_stamped.header.stamp = msg.header.stamp
         pose_stamped.pose = pose_tf.toPose()
         self.pub_pose.publish(pose_stamped)
+
+    def pub_laser_map(self, laser_map, scan):
+        msg = Marker()
+        msg.header.frame_id = "map"
+        msg.header.stamp = scan.header.stamp
+        msg.type = Marker.POINTS
+        msg.action = Marker.ADD
+
+        s = 0.05
+        msg.scale.x = s
+        msg.scale.y = s
+        msg.scale.z = s
+
+        msg.color.a = 1.0
+        msg.color.r = 0
+        msg.color.g = 0
+        msg.color.b = 1
+
+        pts = []
+        for i in range(len(laser_map)):
+            pt = Point()
+            pt.x = laser_map[i,0]
+            pt.y = laser_map[i,1]
+            pts.append(pt)
+        
+        msg.points = pts
+        self.pub_lasmap.publish(msg)
 
 
 #
