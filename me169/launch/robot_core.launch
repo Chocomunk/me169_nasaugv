@@ -14,10 +14,10 @@
   <node name="odometry"
 	pkg="me169"
   	type="odometry.py"/>
-  <!-- <node name="simpledriver"
+  <node name="localization"
 	pkg="me169"
-  	type="simpledriver.py"/> -->
-  <!-- <node name="localization"
+  	type="localization.py"/>
+  <node name="simpledriver"
 	pkg="me169"
-  	type="localization.py"/> -->
+  	type="simpledriver.py"/>
 </launch>

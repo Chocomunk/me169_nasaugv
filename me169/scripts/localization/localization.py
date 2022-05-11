@@ -26,15 +26,17 @@ from corrections import IdentityCorrection, BasicLeastSquaresCorrection
 
 
 MAX_DIST_FROM_ROBOT = 3
+EPSILON = 1e-5
 
 
 def laser2cart(scan: LaserScan):
+    """ Returns a tuple (pts, weights) """
     r = np.array(scan.ranges) / 1.14
     t = np.linspace(scan.angle_min, scan.angle_max, len(r))
     idxs = np.where(r < MAX_DIST_FROM_ROBOT)
-    r = r[idxs, None]
+    r = r[idxs]
     t = t[idxs]
-    return r * np.array((np.cos(t), np.sin(t))).T
+    return r[:,None] * np.array((np.cos(t), np.sin(t))).T, (1 / (r + EPSILON)).flatten()
 
 #
 #   Localization Object
@@ -114,16 +116,14 @@ class Localization:
         tfmsg = self.tfBuffer.lookup_transform("odom",
             self.last_scan.header.frame_id,
             self.last_scan.header.stamp,
-            # "laser",
-            # rospy.Time(0),
             rospy.Duration(0.1))
         self.odom2laser = PlanarTransform.fromTransform(tfmsg.transform)
 
         map2laser = self.map2odom * self.odom2laser
-        laserpts = laser2cart(self.last_scan)
+        laserpts, weights = laser2cart(self.last_scan)
         laser_map = map2laser.apply(laserpts)
 
-        laser_inrange = self.correction.update(laser_map)
+        laser_inrange = self.correction.update(laser_map, weights=None)
         self.pub_laser_map(laser_inrange, msg)
 
         self.map2odom = self.correction.get_tf() * self.map2odom
