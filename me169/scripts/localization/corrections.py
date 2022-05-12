@@ -7,7 +7,7 @@ from scipy.spatial import cKDTree
 from nav_msgs.msg import OccupancyGrid
 from std_msgs.msg import Float32
 
-from util.planar_transform import PlanarTransform
+from planar_transform import PlanarTransform
 
 
 WALLTHRESHOLD = 65      # Believe probability TODO: read from map yaml
@@ -34,7 +34,7 @@ def wall_points(mapgrid: OccupancyGrid):
     g_x = mapgrid.info.origin.position.x
     g_y = mapgrid.info.origin.position.y
     g_qz = mapgrid.info.origin.orientation.z
-    g_qw = mapgrid.info.origin.orientation.z
+    g_qw = mapgrid.info.origin.orientation.w
     res = mapgrid.info.resolution
 
     g_o = np.array([g_x, g_y])
@@ -98,7 +98,7 @@ class BasicLeastSquaresCorrection:
         J = np.hstack((lhs, rhs))
 
         b = J.T @ lam
-        J_dag = np.linalg.inv(b @ J) @ b
+        J_dag = np.linalg.pinv(b @ J) @ b
 
         # r = pts
         # p = wallnear

@@ -23,7 +23,7 @@ from geometry_msgs.msg  import PoseStamped, Point
 from visualization_msgs.msg import Marker
 from sensor_msgs.msg    import LaserScan
 
-from util.planar_transform import PlanarTransform
+from planar_transform import PlanarTransform
 
 
 OCC_THRESH = 0.65
@@ -112,16 +112,16 @@ class AStarPlan:
         g_x = map_msg.info.origin.position.x
         g_y = map_msg.info.origin.position.y
         g_qz = map_msg.info.origin.orientation.z
-        g_qw = map_msg.info.origin.orientation.z
+        g_qw = map_msg.info.origin.orientation.w
 
         self.res = map_msg.info.resolution
         self.map2grid = PlanarTransform(g_x, g_y, g_qz, g_qw)
 
     def to_map(self, pts):
-        return np.round(self.map2grid.apply(pts) / self.res)
+        return self.map2grid.apply(self.res * pts)
         
     def to_grid(self, pts):
-        return self.map2grid.inv().apply(self.res * pts)
+        return (self.map2grid.inv().apply(pts) / self.res).round().astype(int)
 
     def search(self, start, end, cost_func=astar_cost):
         """
@@ -131,8 +131,10 @@ class AStarPlan:
 
         Returns: path A list storing the coordinates of the resulting path (ordered)
         """
-        start = self.to_grid(np.array(start))
-        end = self.to_grid(np.array(end))
+        start = tuple(self.to_grid(np.array(start)))
+        end = tuple(self.to_grid(np.array(end)))
+
+        print(start, end)
 
         # Don't modify the original state
         state = np.copy(self.state)

@@ -21,7 +21,7 @@ from nav_msgs.msg       import Odometry, OccupancyGrid
 from visualization_msgs.msg import Marker
 from sensor_msgs.msg    import LaserScan
 
-from util.planar_transform import PlanarTransform
+from planar_transform import PlanarTransform
 from corrections import IdentityCorrection, BasicLeastSquaresCorrection
 
 
