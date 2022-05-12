@@ -7,7 +7,7 @@ from scipy.spatial import cKDTree
 from nav_msgs.msg import OccupancyGrid
 from std_msgs.msg import Float32
 
-from planar_transform import PlanarTransform
+from util.planar_transform import PlanarTransform
 
 
 WALLTHRESHOLD = 65      # Believe probability TODO: read from map yaml
