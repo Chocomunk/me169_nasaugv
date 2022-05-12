@@ -21,7 +21,7 @@ from nav_msgs.msg       import Odometry, OccupancyGrid
 from visualization_msgs.msg import Marker
 from sensor_msgs.msg    import LaserScan
 
-from planar_transform import PlanarTransform
+from util.planar_transform import PlanarTransform
 from corrections import IdentityCorrection, BasicLeastSquaresCorrection
 
 
@@ -54,10 +54,10 @@ class Localization:
         self.last_scan = LaserScan()
 
         # Transforms
-        self.map2base = PlanarTransform.basic(0, 0, 0)
-        self.map2odom = PlanarTransform.basic(0, 0, 0)
-        self.odom2base = PlanarTransform.basic(0, 0, 0)
-        self.odom2laser = PlanarTransform.basic(0, 0, 0)
+        self.map2base = PlanarTransform.unity()
+        self.map2odom = PlanarTransform.unity()
+        self.odom2base = PlanarTransform.unity()
+        self.odom2laser = PlanarTransform.unity()
 
         self.correction = BasicLeastSquaresCorrection(self.mapmsg)
         # self.correction = IdentityCorrection(self.mapmsg)

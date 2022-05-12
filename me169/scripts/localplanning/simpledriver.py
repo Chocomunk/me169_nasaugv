@@ -183,8 +183,9 @@ class LocalDriver:
         # Define Variables
         self.last_pose = PoseStamped()
         self.nav_goal = PoseStamped()
-        self.controller = DriveTurn()
         self.last_scan = LaserScan()
+
+        self.controller = DriveTurn()
 
         # Create a publisher to send velocity commands.
         self.pub_vcmd = rospy.Publisher('/vel_cmd', Twist,
