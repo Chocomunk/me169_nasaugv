@@ -25,13 +25,13 @@ from planar_transform import PlanarTransform
 from corrections import IdentityCorrection, BasicLeastSquaresCorrection
 
 
-MAX_DIST_FROM_ROBOT = 3
+MAX_DIST_FROM_ROBOT = 4.1
 EPSILON = 1e-5
 
 
 def laser2cart(scan: LaserScan):
     """ Returns a tuple (pts, weights) """
-    r = np.array(scan.ranges) / 1
+    r = np.array(scan.ranges) / 1.1
     t = np.linspace(scan.angle_min, scan.angle_max, len(r))
     idxs = np.where(r < MAX_DIST_FROM_ROBOT)
     r = r[idxs]

@@ -37,9 +37,9 @@ IMAGE_TOPIC = '/camera/depth/image_rect_raw'
 MIN_HEIGHT = 0.100      # Min/Max vertical height relative to camera
 MAX_HEIGHT = 1.500
 
-PITCH_START      = math.radians(17.0)
+PITCH_START      = math.radians(20.0)
 PITCH_RANGE      = math.radians(30.0)
-PITCH_RESOLUTION = math.radians(60.1)
+PITCH_RESOLUTION = math.radians(.01)
 
 
 #
@@ -107,6 +107,7 @@ class DepthCamCalibrator:
         # for the next subscriber callback.  Skip backed-up messages.
         _ = rospy.Subscriber(IMAGE_TOPIC, Image, self.callback_depthimage,
                              queue_size=1, buff_size=20*self.Nu*self.Nv*2)
+        self.pub = rospy.Publisher("/depth2", Image, queue_size=10)
 
     ######################################################################
     # Setup
@@ -177,6 +178,7 @@ class DepthCamCalibrator:
         # Reshape into a (NuxNv) image.  And extract the center column.
         depth = np.frombuffer(imagemsg.data, np.uint16)
         depth = depth.reshape(self.Nv, self.Nu)
+        depth2 = np.copy(depth)
         depth = depth[:,int(round(self.cu))]
 
         #print(repr(depth))
@@ -215,13 +217,13 @@ class DepthCamCalibrator:
             #      (math.degrees(pitch), r, s, N))
             return(pitch, N, r, s)
 
+        # Find the lowest standard deviation fit.
+        below = fit(PITCH_START - PITCH_RANGE)
+        mid   = fit(PITCH_START)
+        above = fit(PITCH_START + PITCH_RANGE)
+
         # Should we try to re-estimate the pitch angle.
         if False:
-            # Find the lowest standard deviation fit.
-            below = fit(PITCH_START - PITCH_RANGE)
-            mid   = fit(PITCH_START)
-            above = fit(PITCH_START + PITCH_RANGE)
-
             while (above[0]-below[0] > PITCH_RESOLUTION):
                 if (above[0]-mid[0] > mid[0]-below[0]):
                     new = fit(0.5*(above[0]+mid[0]))
@@ -231,6 +233,13 @@ class DepthCamCalibrator:
                     new = fit(0.5*(below[0]+mid[0]))
                     if new[3] > mid[3]:  (below, mid, above) = (new, mid, above)
                     else:                (below, mid, above) = (below, new, mid)
+
+        vbar = np.tan(mid[0])
+        v = vbar * self.fv + self.cv
+        depth2[int(np.round(v)), :] = 10000
+
+        imagemsg.data = depth2.flatten().tobytes()
+        self.pub.publish(imagemsg)
 
         # Report.
         (pitch, N, r, s) = mid

@@ -28,7 +28,7 @@ from planar_transform import PlanarTransform
 
 OCC_THRESH = 0.65
 FREE_THRESH = 0.196
-BOT_RAD = 0.1
+BOT_RAD = 0.15
 POS_TOL = 0.15              # (meters)
 
 
@@ -136,8 +136,6 @@ class AStarPlan:
         """
         start = tuple(reversed(self.to_grid(np.array(start))))
         end = tuple(reversed(self.to_grid(np.array(end))))
-
-        print(start, end)
 
         # Don't modify the original state
         state = np.copy(self.state)
@@ -299,7 +297,6 @@ class Planner:
 
         waypts = self.planner.search((s_x, s_y), (e_x, e_y))
         self.waypts = waypts.tolist()
-        print(self.waypts)
         if self.waypts:
             self.pub_path_pts(waypts)
             self.pub_wayp(self.waypts[0])
@@ -319,8 +316,6 @@ class Planner:
             
             dx = gx - px
             dy = gy - py
-
-            print(self.waypts)
 
             if dx*dx + dy*dy < POS_TOL*POS_TOL:
                 self.waypts.pop(0)
