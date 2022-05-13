@@ -1,4 +1,3 @@
-from ast import Lambda
 import math
 import rospy
 import numpy as np
@@ -11,8 +10,8 @@ from planar_transform import PlanarTransform
 
 
 WALLTHRESHOLD = 65      # Believe probability TODO: read from map yaml
-MAXDISTANCE = 0.2         # Distance to wall
-FRACTION = 0.05            # Correction dampening
+MAXDISTANCE = 0.5         # Distance to wall
+FRACTION = 0.03            # Correction dampening
 POS_LIM = 0.3           # Limit for position correction (meters)
 THETA_LIM = np.pi / 12  # Limit for angle correction (radians)
 
@@ -99,17 +98,21 @@ class BasicLeastSquaresCorrection:
         lhs = np.tile(np.eye(2), (len(pts), 1))
         J = np.hstack((lhs, rhs))
 
-        b = J.T @ lam
-        J_dag = np.linalg.pinv(b @ J) @ b
+        # if weights is None:
+        #     lam = np.eye(len(pts))
+        # else:
+        #     lam = np.diag(weights[idxs])
 
         # r = pts
         # p = wallnear
         # a = np.linalg.norm(p-r, axis=1)[:,None]
 
         # lhs = p-r
-        # rhs = np.sum(r * np.flip(pts, axis=1) * np.array([[1, -1]]), axis=1)[:,None]
+        # rhs = np.sum(r * np.flip(p, axis=1) * np.array([[1, -1]]), axis=1)[:,None]
         # J = np.divide(np.hstack((lhs, rhs)), a)
 
+        b = J.T @ lam
+        J_dag = np.linalg.pinv(b @ J) @ b
         d = (J_dag @ a).flatten()
         assert (d.shape == (3,)), "Wrong delta dimensions: {0} != (3,)".format(d.shape)
 

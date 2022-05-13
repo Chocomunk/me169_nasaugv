@@ -31,7 +31,7 @@ EPSILON = 1e-5
 
 def laser2cart(scan: LaserScan):
     """ Returns a tuple (pts, weights) """
-    r = np.array(scan.ranges) / 1.14
+    r = np.array(scan.ranges) / 1
     t = np.linspace(scan.angle_min, scan.angle_max, len(r))
     idxs = np.where(r < MAX_DIST_FROM_ROBOT)
     r = r[idxs]
@@ -96,7 +96,7 @@ class Localization:
         rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, self.cb_init_pose)
 
         # Create a subscriber to listen to the laser scan.
-        rospy.Subscriber('/scan', LaserScan, self.cb_laser)
+        rospy.Subscriber('/scan', LaserScan, self.cb_laser, queue_size=1)
 
     def cb_init_pose(self, msg: PoseWithCovarianceStamped):
         assert (msg.header.frame_id == "map"), "Init pose not in map frame"

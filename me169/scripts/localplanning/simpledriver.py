@@ -19,11 +19,11 @@ from geometry_msgs.msg  import PoseStamped, Twist
 from sensor_msgs.msg    import LaserScan
 
 
-LAM_TURN = 1 / 0.7      # time constant multiplier for the angular speed (hz)
-LAM_FORW = 1 / 1      # timst contant multiplier for forward speed (hz)
-POS_TOL = 0.1              # (meters)
+LAM_TURN = 1 / 0.7          # time constant multiplier for the angular speed (hz)
+LAM_FORW = 1 / 1            # timst contant multiplier for forward speed (hz)
+POS_TOL = 0.1               # (meters)
 VEL_TOL = 0.4               # (m/s)
-THETA_TOL = math.pi/4.     # (radians)
+THETA_TOL = math.pi/4.      # (radians)
 OMEGA_LIM = math.pi/3.      # (rad/s)
 TURN_DELAY = 0.25           # (sec)
 SCAN_ANGLE = math.pi/3      # (radians)
@@ -53,9 +53,11 @@ class DriveTurn:
     def __init__(self):
         self.last_facing_time = rospy.Time.now()
         self.finished = True
+        self.align = True
 
-    def reset(self):
+    def reset(self, align=True):
         self.finished = False
+        self.align = align
 
     def update(self, pose: PoseStamped, nav_goal: PoseStamped, scan: LaserScan):
         # Find current angle
@@ -82,7 +84,7 @@ class DriveTurn:
             nav_th = 2*math.atan2(goal_q.z, goal_q.w)
             adiff = angle_diff(nav_th, cur_th)
             
-            if abs(adiff) < THETA_TOL:
+            if not self.align or abs(adiff) < THETA_TOL:
                 adiff = 0
                 self.finished = True
         else:
@@ -92,7 +94,7 @@ class DriveTurn:
 
             # Compute desired velocity and omega
             if closest_scan(scan) > WALL_THRESH:
-                vd = LAM_FORW * dist
+                vd = LAM_FORW * (dist if self.align else 1)
                 vd = min(VEL_TOL, max(-VEL_TOL, vd))    # Clamp
                 vx = vd * max(0, math.cos(adiff))
 
@@ -195,15 +197,16 @@ class LocalDriver:
         rospy.Subscriber('/pose', PoseStamped, self.cb_pose)
 
         # Create a subscriber to listen to navigation goal.
-        rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.cb_nav_goal)
+        rospy.Subscriber('/waypoint_intermediate', PoseStamped, self.cb_nav_goal, (False,))
+        rospy.Subscriber('/waypoint_final', PoseStamped, self.cb_nav_goal, (True,))
 
         # Create a subscriber to listen to the lase scan.
         rospy.Subscriber('/scan', LaserScan, self.cb_laser)
 
-    def cb_nav_goal(self, msg: PoseStamped):
+    def cb_nav_goal(self, msg: PoseStamped, align=True):
         assert (msg.header.frame_id == "map"), "Nav goal not in map frame"
         self.nav_goal = msg
-        self.controller.reset()
+        self.controller.reset(align)
 
     def cb_pose(self, msg: PoseStamped):
         self.last_pose = msg

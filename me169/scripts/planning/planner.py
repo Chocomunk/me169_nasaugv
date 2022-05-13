@@ -29,6 +29,7 @@ from planar_transform import PlanarTransform
 OCC_THRESH = 0.65
 FREE_THRESH = 0.196
 BOT_RAD = 0.1
+POS_TOL = 0.15              # (meters)
 
 
 class SearchError(Exception):
@@ -236,7 +237,7 @@ class AStarPlan:
             raise SearchError("Could not reach the goal state.")
 
         # Walk the search path
-        path = [end, curr]                      # Populated backwards from `end`
+        path = [curr]                      # Populated backwards from `end`
         curr = tuple(parent[curr])
 
         # Loop while the parent exists, the start node has no parent
@@ -265,13 +266,16 @@ class Planner:
         self.last_scan = LaserScan()
 
         self.planner = AStarPlan(self.mapmsg)
+        self.reached_goal = True
+        self.waypts = []
 
         # TODO: publish waypoint
         # Create a publisher to send waypoints.
-        self.pub_waypoint = rospy.Publisher('/waypoint', PoseStamped,
+        self.pub_wpinter = rospy.Publisher('/waypoint_intermediate', PoseStamped,
                                         queue_size=10)
-
-        self.pub_wapmap = rospy.Publisher('/waypmap', Marker,
+        self.pub_wpfinal = rospy.Publisher('/waypoint_final', PoseStamped,
+                                        queue_size=10)
+        self.pub_waypmap = rospy.Publisher('/waypmap', Marker,
                                         queue_size=10)
 
         # Create a subscriber to listen to robot pose in map.
@@ -294,7 +298,12 @@ class Planner:
         e_y = msg.pose.position.y
 
         waypts = self.planner.search((s_x, s_y), (e_x, e_y))
-        self.pub_path_pts(waypts)
+        self.waypts = waypts.tolist()
+        print(self.waypts)
+        if self.waypts:
+            self.pub_path_pts(waypts)
+            self.pub_wayp(self.waypts[0])
+            self.reached_goal = False
 
     def cb_pose(self, msg: PoseStamped):
         self.last_pose = msg
@@ -303,7 +312,31 @@ class Planner:
         self.last_scan = msg
 
     def cb_timer(self, event):
-        pass
+        if not self.reached_goal:
+            px = self.last_pose.pose.position.x
+            py = self.last_pose.pose.position.y
+            gx, gy = self.waypts[0]
+            
+            dx = gx - px
+            dy = gy - py
+
+            print(self.waypts)
+
+            if dx*dx + dy*dy < POS_TOL*POS_TOL:
+                self.waypts.pop(0)
+                if len(self.waypts) <= 0:
+                    self.pub_wpfinal.publish(self.nav_goal)
+                    self.reached_goal = True
+                else:
+                    self.pub_wayp(self.waypts[0])
+
+    # TODO: set timestamp
+    def pub_wayp(self, point):
+        msg = PoseStamped()
+        msg.header.frame_id = "map"
+        msg.pose.position.x = point[0]
+        msg.pose.position.y = point[1]
+        self.pub_wpinter.publish(msg)
 
     def pub_path_pts(self, path):
         msg = Marker()
@@ -329,7 +362,7 @@ class Planner:
             pts.append(pt)
         
         msg.points = pts
-        self.pub_wapmap.publish(msg)
+        self.pub_waypmap.publish(msg)
 
 #
 #   Main Code
@@ -339,7 +372,7 @@ if __name__ == "__main__":
     rospy.init_node('planner')
 
     # Define durations
-    duration = rospy.Duration(1. / 2)       # 2 Hz
+    duration = rospy.Duration(1. / 10)       # 10 Hz
     dt       = duration.to_sec()
 
     # Instantiate the Planner object
