@@ -28,6 +28,7 @@ from planar_transform import PlanarTransform
 
 OCC_THRESH = 0.65
 FREE_THRESH = 0.196
+BOT_RAD = 0.1
 
 
 class SearchError(Exception):
@@ -85,14 +86,14 @@ class PriorityQueue:
         return len(self.entry_finder) == 0
 
 
-def manhattan(a, b):
-    return abs(b[1] - a[1]) + abs(b[0] - a[0])
-
-def step_cost(parent_cost, *args, **kwargs):
-    return parent_cost + 1
+def euclidian(a, b):
+    x = b[0] - a[0]
+    y = b[1] - a[1]
+    return np.sqrt(x*x + y*y)
+    # return abs(b[1] - a[1]) + abs(b[0] - a[0])
 
 def astar_cost(cost_to_reach, coord, end, manhattan_weight=1, *args, **kwargs):
-    return cost_to_reach + manhattan(coord, end) * manhattan_weight
+    return cost_to_reach + euclidian(coord, end) * manhattan_weight
 
 
 class AStarPlan:
@@ -101,12 +102,13 @@ class AStarPlan:
         self.map = map_msg
 
         # Setup Grid
-        self.grid = map_msg.data
         self.w = self.map.info.width
         self.h = self.map.info.height
-        self.state = np.array(self.grid).reshape(self.h, self.w)
-        self.state[self.state > OCC_THRESH] = 1
-        self.state[self.state < FREE_THRESH] = 0
+        self.grid = np.array(map_msg.data).reshape((self.h, self.w))
+        self.state = np.zeros((self.h, self.w))
+        self.state += TileStates.UNKNOWN
+        self.state[self.grid > OCC_THRESH] = TileStates.WALL
+        self.state[self.grid < 0] = TileStates.WALL
 
         # Setup transforms
         g_x = map_msg.info.origin.position.x
@@ -131,8 +133,8 @@ class AStarPlan:
 
         Returns: path A list storing the coordinates of the resulting path (ordered)
         """
-        start = tuple(self.to_grid(np.array(start)))
-        end = tuple(self.to_grid(np.array(end)))
+        start = tuple(reversed(self.to_grid(np.array(start))))
+        end = tuple(reversed(self.to_grid(np.array(end))))
 
         print(start, end)
 
@@ -152,25 +154,27 @@ class AStarPlan:
         q = PriorityQueue()         # Define the p-queue of ONDECK states
 
         def push(coord, c, par):
-            """ Push an element `coord` with cost `c` and parent `par` """
+            """ Push an element `coord` with cost-to-reach `c` and parent `par` """
             s = state[coord]
+            child_cost = cost_func(cost_to_reach=c, 
+                                    coord=coord, start=start, end=end)
 
             # This tile was not encountered yet
             if s == TileStates.UNKNOWN:
-                q.push(coord, c)
+                q.push(coord, child_cost)
                 state[coord] = TileStates.ONDECK
                 if par:
-                    cost_to_reach[coord] = step_cost(cost_to_reach[par])
+                    cost_to_reach[coord] = c
                     parent[coord] = par
 
             # This tile was seen in another path
             elif s == TileStates.ONDECK:
                 # Newer path is lower cost, so update to new
-                if c < cost_to_reach[coord]:     
+                if c < cost_to_reach[coord]:
                     q.remove(coord)
-                    q.push(coord, c)
+                    q.push(coord, child_cost)
                     if par:
-                        cost_to_reach[coord] = step_cost(cost_to_reach[par])
+                        cost_to_reach[coord] = c
                         parent[coord] = par
 
             # else: do nothing
@@ -178,17 +182,39 @@ class AStarPlan:
         def pop():
             """ Pop an element from the p-queue """
             coord = q.pop()
+            if state[coord] == TileStates.WALL:
+                print("Big problem")
             state[coord] = TileStates.PROCESSED
             return coord
 
         # ----------------------- Utility Inner Functions -------------------------- 
 
-        def neighbors(coord):
+        def near_nodes(r, c, s):
+            d = np.sqrt(2) * s
+            return [
+                    ((r+s, c+s), d), ((r-s, c-s), d), ((r-s, c+s), d), ((r+s, c-s), d), 
+                    ((r+s, c), s),   ((r-s, c), s),   ((r, c+s), s),   ((r, c-s), s)
+                    ]
+
+        def next_to_wall(r, c):
+            for coord, _ in near_nodes(r, c, math.ceil(BOT_RAD / self.res)):
+                if state[coord] == TileStates.WALL:
+                    return True
+
+        def neighbors(coord, s=5):
             """ Returns all in-bound neighbors of a coord """
             r, c = coord
-            total = [(r+1, c+1), (r-1, c-1), (r-1, c+1), (r+1, c-1), 
-                     (r+1, c),   (r-1, c),   (r, c+1),   (r, c-1)]
-            return [(r,c) for r,c in total if (0 <= r < M) and (0 <= c < N)]
+            total = near_nodes(r, c, s)
+            filt = []
+            for (r, c), a in total:
+                if (0 <= r < M) and (0 <= c < N) and not next_to_wall(r, c):
+                    filt.append(((r,c), a))
+            return filt
+
+        def inrange(a, b, s=5):
+            x1, y1 = a
+            x2, y2 = b
+            return abs(x2 - x1) <= s+1 and abs(y2 - y1) <= s+1
 
         # ------------------------- Main Algorithm Loop ---------------------------- 
 
@@ -200,26 +226,25 @@ class AStarPlan:
         found = False
         while not q.is_empty():
             curr = pop()            # Get the next lowest-cost leaf
-            if curr == end:         # If it is the goal, we finished!
+            if inrange(curr, end):          # If it is the goal, we finished!
                 found = True
                 break
-            for child in neighbors(curr):   # Otherwise, check every child
-                child_cost = cost_func(cost_to_reach=step_cost(cost_to_reach[curr]), 
-                                        coord=child, start=start, end=end)
-                push(child, child_cost, curr)
+            for child, c in neighbors(curr):   # Otherwise, check every child
+                push(child, cost_to_reach[curr] + c, curr)
 
         if not found:
             raise SearchError("Could not reach the goal state.")
 
         # Walk the search path
-        path = [end]                                # Populated backwards from `end`
-        curr = tuple(parent[end])
+        path = [end, curr]                      # Populated backwards from `end`
+        curr = tuple(parent[curr])
 
         # Loop while the parent exists, the start node has no parent
         while (parent[curr] != [-1, -1]).any():
             path.append(curr)                       # Add to the path
             curr = tuple(parent[curr])              # Step to the next parent
         path = list(reversed(path))                 # Reverse the list into the right order.
+        path = [(x, y) for y, x in path]
 
         return self.to_map(np.array(path))
 
@@ -232,7 +257,7 @@ class Planner:
     def __init__(self):
         # Wait 30sec for a map.
         rospy.loginfo("Waiting for a map...")
-        self.mapmsg = rospy.wait_for_message("/map", OccupancyGrid, 30.0)
+        self.mapmsg: OccupancyGrid = rospy.wait_for_message("/map", OccupancyGrid, 30.0)
         
         # Define Variables
         self.last_pose = PoseStamped()
@@ -286,7 +311,7 @@ class Planner:
         msg.type = Marker.POINTS
         msg.action = Marker.ADD
 
-        s = 0.05
+        s = self.mapmsg.info.resolution
         msg.scale.x = s
         msg.scale.y = s
         msg.scale.z = s
@@ -314,7 +339,7 @@ if __name__ == "__main__":
     rospy.init_node('planner')
 
     # Define durations
-    duration = rospy.Duration(1. / 10)       # 10 Hz
+    duration = rospy.Duration(1. / 2)       # 2 Hz
     dt       = duration.to_sec()
 
     # Instantiate the Planner object

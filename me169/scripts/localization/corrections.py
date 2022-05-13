@@ -13,7 +13,7 @@ from planar_transform import PlanarTransform
 WALLTHRESHOLD = 65      # Believe probability TODO: read from map yaml
 MAXDISTANCE = 0.2         # Distance to wall
 FRACTION = 0.05            # Correction dampening
-POS_LIM = 0.5           # Limit for position correction (meters)
+POS_LIM = 0.3           # Limit for position correction (meters)
 THETA_LIM = np.pi / 12  # Limit for angle correction (radians)
 
 
@@ -36,6 +36,8 @@ def wall_points(mapgrid: OccupancyGrid):
     g_qz = mapgrid.info.origin.orientation.z
     g_qw = mapgrid.info.origin.orientation.w
     res = mapgrid.info.resolution
+
+    print(g_qz, g_qw)
 
     g_o = np.array([g_x, g_y])
     g_t = 2 * math.atan2(g_qz, g_qw)
