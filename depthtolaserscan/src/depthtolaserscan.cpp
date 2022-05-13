@@ -109,7 +109,8 @@ double angle_inc;		// Scan increment between sample angles
 typedef struct _pointspec	// Specifications of a point sample
 {
   int          index;		// Index to flattened depth data[row][col]
-  uint16_t     maxdepth;	// Max depth for contact in mm!
+  uint16_t     depthfreespace;	// Depth (mm) showing freespace
+  uint16_t     depthoutofband;	// Depth (mm) showing out of vertical band
   double       depthtorange;	// Depth to range factor mm to m!
 } pointspec_t;
 
@@ -412,25 +413,43 @@ double depthToRange(int u, int v)
 }
 
 /*
-**   Max Depth for Contact
+**   Depth Thresholds
 **
-**   Consider only obstacles between hmin and hmax (relative to hcam).
-**   So once the depth exceeds the corresponding depth (in the given
-**   direction), we know there is no contact.
+**   We consider two distinct thresholds:
+**
+**   1) If the reported depth is greater than depthForOutOfBand(), the
+**      possible contact lies above hmax or below hmin (vertically
+**      outside the range of interest).  That means we do not report
+**      the contact, but we also do not use this sample to declare
+**      free space.  Basically, we ignore it.
+**
+**   2) If the reported depth is less than depthForOutOfBand(), i.e.
+**      still in the vertical range of interest, but greater than
+**      depthForFreespace(), it is past the maximum we want for the
+**      laser range and we report freespace or no contact.
 */
-double maxDepthForContact(int u, int v)
+double depthForOutOfBand(int u, int v)
+{
+  // Precompute the normalized image coordinate.
+  double vbar = ((double) v - cv) / fv;
+  
+  // Consider the depth at which contacts fall vertically outside the
+  // hmin-to-hmax range and hence shold be ignored.  Assuming hcam
+  // lies in range, check looking up or down seperately.  The depth
+  // can (in theory) report up to 65535mm, so set infinity to 66m.
+  double a = spitch - cpitch * vbar;
+  if      (a > 0.0)  return (hmax-hcam)/a;	// Looking up
+  else if (a < 0.0)  return (hmin-hcam)/a;	// Looking down
+  else               return 66.0;		// Looking flat (infinity)
+}
+
+double depthForFreespace(int u, int v)
 {
   // Precompute the normalized image coordinate.
   double vbar = ((double) v - cv) / fv;
     
   // Depth corresponding to max contact range (in given direction).
-  double dmax = RANGE_MAXIMUM / depthToRange(u,v);
-  
-  // Also consider the depth limit due to height, looking up or down.
-  double a = spitch - cpitch * vbar;
-  if      (a > 0.0)  return fmin(dmax, (hmax-hcam)/a);	// Looking up
-  else if (a < 0.0)  return fmin(dmax, (hmin-hcam)/a);	// Looking down
-  else               return      dmax;			// Looking flat
+  return RANGE_MAXIMUM / depthToRange(u,v);
 }
 
 /*
@@ -475,10 +494,11 @@ int setSampleSpecs()
 	    break;
 
 	  // Set the specifications.
-	  pointspec_t *ptspecp  = &anglespecs[iangle].pointspecs[iline];
-	  ptspecp->index        = v*Nu + u;
-	  ptspecp->maxdepth     = (uint16_t)(1000.0 * maxDepthForContact(u,v));
-	  ptspecp->depthtorange = depthToRange(u,v) / 1000.0;
+	  pointspec_t *ptspecp    = &anglespecs[iangle].pointspecs[iline];
+	  ptspecp->index          = v*Nu + u;
+	  ptspecp->depthoutofband = (uint16_t)(1000.0*depthForOutOfBand(u,v));
+	  ptspecp->depthfreespace = (uint16_t)(1000.0*depthForFreespace(u,v));
+	  ptspecp->depthtorange   = depthToRange(u,v) / 1000.0;
 	  anglespecs[iangle].points = iline+1;
 	}
     }
@@ -600,8 +620,16 @@ void callback_image(const Image::ConstPtr& imagemsgp)
 	  // Grab the depth at the point of interest.
 	  uint16_t  depth = depthdata[ptspecp->index];
 
-	  // Adjust the range as appropriate.
-	  if (depth > ptspecp->maxdepth)
+	  // Check whether the depth places the contact (a) vertically
+	  // out of band of interest (ignore), (b) beyond the maximum
+	  // range (freespace), (c) in range (report), of (d) at zero
+	  // being an error (ignore).
+	  if (depth > ptspecp->depthoutofband)
+	    {
+	      // Ignore.
+	      ;
+	    }
+	  else if (depth > ptspecp->depthfreespace)
 	    {
 	      // Mark the contact.
 	      contact_past_range = 1;
