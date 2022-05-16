@@ -1,5 +1,18 @@
 <launch>
-  <!-- Run the RealSense Depth Camera Calibration. -->
+  <!-- Run the robot nodes to support RealSense depth camera calibration. -->
+  <!-- EQUIVALENTLY just run the regular system, including the RealSense. -->
+
+  <!-- URDF parameter. -->
+  <arg name="urdf"  default="bot.urdf"/>
+  <arg name="model" default="$(find bot_description)/urdf/$(arg urdf)"/>
+
+  <!-- Image topic parameter. -->
+  <arg name="topic" default="/camera/depth/image_overlaid"/>
+
+
+  <!-- Load the URDF file into the robot_description parameter. -->
+  <param name="robot_description" textfile="$(arg model)"/>
+
 
   <!-- Start the RealSense. This is *not* enabling the pointcloud -->
   <!-- and running the depth/color at 15Hz to lower the load.     -->
@@ -23,12 +36,14 @@
     <arg name="pointcloud_texture_stream" default="RS2_STREAM_COLOR"/>
   </include>
 
-  <!-- Start the depth camera calibration. -->
-  <node name="depthcamcal"
-	pkg ="depthtolaserscan"
-  	type="depthcamcal.py"
-	output="screen">
-    <param name="min_height"  value="0.100"/>
-    <param name="max_height"  value="1.500"/>
-  </node>
+  <!-- Also publish all robot transforms, to access the URDF info. -->
+  <node name="robot_state_publisher"
+	pkg ="robot_state_publisher"
+  	type="robot_state_publisher"/>
+
+  <!-- And open rqt (with the desired ImageView plugin). -->
+  <node name="rqt"
+	pkg ="rqt_gui"
+  	type="rqt_gui"
+	args="-ht -l -f -s rqt_image_view/ImageView --args $(arg topic)"/>
 </launch>

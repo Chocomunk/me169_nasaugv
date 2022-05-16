@@ -1,0 +1,14 @@
+<launch>
+  <!-- Run the RealSense Depth Camera Calibration: Horizon Overlay. -->
+
+  <!-- Run the robot nodes to support RealSense depth camera calibration. -->
+  <!-- EQUIVALENTLY just run the regular system, including the RealSense. -->
+  <include file="$(find depthtolaserscan)/launch/depthcamcal_system.launch"/>
+
+  <!-- Start the depth camera calibration: horizon. -->
+  <node name="depthcamcal_horizon"
+	pkg ="depthtolaserscan"
+  	type="depthcamcal_horizon.py"
+	output="screen">
+  </node>
+</launch>
