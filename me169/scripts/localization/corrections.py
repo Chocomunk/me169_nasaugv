@@ -36,8 +36,6 @@ def wall_points(mapgrid: OccupancyGrid):
     g_qw = mapgrid.info.origin.orientation.w
     res = mapgrid.info.resolution
 
-    print(g_qz, g_qw)
-
     g_o = np.array([g_x, g_y])
     g_t = 2 * math.atan2(g_qz, g_qw)
     c, s = np.cos(g_t), np.sin(g_t)

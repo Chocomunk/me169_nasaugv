@@ -25,13 +25,16 @@ from planar_transform import PlanarTransform
 from corrections import IdentityCorrection, BasicLeastSquaresCorrection
 
 
+CORR_M = 1.1
+CORR_B = 0.162
 MAX_DIST_FROM_ROBOT = 4.1
 EPSILON = 1e-5
 
 
 def laser2cart(scan: LaserScan):
     """ Returns a tuple (pts, weights) """
-    r = np.array(scan.ranges) / 1.1
+    # r = np.array(scan.ranges) * CORR_M + CORR_B
+    r = np.array(scan.ranges)
     t = np.linspace(scan.angle_min, scan.angle_max, len(r))
     idxs = np.where(r < MAX_DIST_FROM_ROBOT)
     r = r[idxs]
@@ -123,13 +126,10 @@ class Localization:
         laserpts, weights = laser2cart(self.last_scan)
         laser_map = map2laser.apply(laserpts)
 
-        laser_inrange = self.correction.update(laser_map, weights=None)
+        laser_inrange = self.correction.update(laser_map, weights=weights)
         self.pub_laser_map(laser_inrange, msg)
 
         self.map2odom = self.correction.get_tf() * self.map2odom
-
-    def cb_odom(self, msg: Odometry):
-        self.last_odom = msg
 
         # Create the transform msg and broadcast (reuse the time stamp).
         # NOTE: we broadcast for every /odom, but only update for each /initialpose
@@ -139,6 +139,9 @@ class Localization:
         tf_msg.child_frame_id       = 'odom'
         tf_msg.transform            = self.map2odom.toTransform()
         self.brd_tf.sendTransform(tf_msg)
+
+    def cb_odom(self, msg: Odometry):
+        self.last_odom = msg
 
         # Compute map2base pose corresponding to the odom2base reading
         self.odom2base = PlanarTransform.fromPose(msg.pose.pose)

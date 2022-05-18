@@ -109,6 +109,9 @@ class DepthCamCalibrator:
                              queue_size=1, buff_size=20*self.Nu*self.Nv*2)
         self.pub = rospy.Publisher("/depth2", Image, queue_size=10)
 
+        self.circ_q = np.zeros(100)
+        self.circ_i = 0
+
     ######################################################################
     # Setup
 
@@ -243,8 +246,10 @@ class DepthCamCalibrator:
 
         # Report.
         (pitch, N, r, s) = mid
+        self.circ_q[self.circ_i] = r
+        self.circ_i = (self.circ_i + 1) % len(self.circ_q)
         print("Pitch %5.3fdeg: r = %6.3fm with std %5.3fm over %d samples" %
-              (math.degrees(pitch), r, s, N))
+              (math.degrees(pitch), np.mean(self.circ_q), s, N))
 
 
 #
