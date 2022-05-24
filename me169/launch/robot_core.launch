@@ -1,23 +1,25 @@
 <launch>
-	<!-- Map Yaml File. -->
-	<arg name="map" default="$(find me169_shared)/maps/keck308corner.yaml"/>
+    <!-- Map Yaml File. -->
+    <arg name="map" default="$(find me169_shared)/maps/keck308corner.yaml"/>
 
-	<!-- Start the map server -->
-	<node name="map_server"
-		pkg ="map_server"
-		type="map_server"
-		args="$(arg map)"/>
+    <include file="$(find depthtolaserscan)/launch/laserscan.launch" />
+
+    <!-- Start the map server -->
+    <node name="map_server"
+        pkg ="map_server"
+        type="map_server"
+        args="$(arg map)"/>
 
   <node name="wheel_controller"
-	pkg="me169"
-  	type="wheelcontrol.py"/>
+    pkg="me169"
+      type="wheelcontrol.py"/>
   <node name="odometry"
-	pkg="me169"
-  	type="odometry.py"/>
+    pkg="me169"
+      type="odometry.py"/>
   <!-- <node name="localization"
-	pkg="me169"
-  	type="localization.py"/> -->
+    pkg="me169"
+      type="localization.py"/> -->
   <!-- <node name="simpledriver"
-	pkg="me169"
-  	type="simpledriver.py"/> -->
+    pkg="me169"
+      type="simpledriver.py"/> -->
 </launch>
