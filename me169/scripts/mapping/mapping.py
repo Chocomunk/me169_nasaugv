@@ -31,10 +31,6 @@ def maxpool(mat, kernel_size):
     return np.nanmax(mat_pad.reshape(new_shape),axis=(1,3))
 
 
-def inverse_model(gpos, pose: Pose, scan: LaserScan):
-    pass
-
-
 K = 5
 
 
@@ -94,67 +90,52 @@ class Mapping:
 
     def cb_timer(self, event):
         """ Update the map and publish """
-        # Get orientation as unit vec
+        # Robot pose
+        rx = self.last_pose.pose.position.x         # Robot x-coord
+        ry = self.last_pose.pose.position.y         # Robot y-coord
         qz = self.last_pose.pose.orientation.z
         qw = self.last_pose.pose.orientation.w
-        robot_t = 2*np.arctan2(qz, qw)
-        c, s = np.cos(robot_t), np.sin(robot_t)
-        ori = np.array([c,s])
+        rt = 2*np.arctan2(qz, qw)                   # Robot map-space orientation
 
-        # Angle limits              
+        # Limits/Tolerances
         ang_min = self.last_scan.angle_min
         ang_inc = self.last_scan.angle_increment
-        ang_lim = np.cos((self.last_scan.angle_max - self.last_scan.angle_min) / 2)
-
-        # Robot position
-        rx = self.last_pose.pose.position.x
-        ry = self.last_pose.pose.position.y
-
-        # Range limit
         max_dist = self.last_scan.range_max
-        max_dist2 = max_dist*max_dist                       # Pre-square
-
-        # Occupancy tolerance
         pos_tol = self.res / 2
-        ang_tol = ang_inc / 2
 
         # Laser data
         ranges = self.last_scan.ranges
 
+        # TODO: only iterate through grid spaces that are in-range
         # Update occupancy
         for r in range(self.h):
-            y = (r+0.5) * self.res
-            dy = y-ry
-            dy2 = dy*dy
+            y = (r+0.5) * self.res                                  # Center of grid
+            dy = y-ry                                               # Vec from robot
             for c in range(self.w):
-                x = (c+0.5) * self.res
-                dx = x-rx
-                dx2 = dx*dx
+                x = (c+0.5) * self.res                              # Center of grid
+                dx = x-rx                                           # Vec from robot
 
-                # Check dot-product for angle and check total distance
-                v = np.array([dx,dy])
-                v_hat = v / np.linalg.norm(v)
-                if dx2 + dy2 < max_dist2 and np.dot(v_hat, ori) > ang_lim:
-                    r = np.sqrt(dx2 + dy2)
-                    phi = np.atan2(dy, dx) - robot_t
-                    k = int((phi - ang_min + ang_inc / 2) // ang_inc)   # Get laser index from angle
-                    theta_k = k * ang_inc + ang_min
-                    z = ranges[k]
+                r = np.sqrt(dx*dx + dy*dy)                          # Dist to robot
+                phi = np.atan2(dy, dx) - rt                         # Robot -> Grid angle
+                k = int((phi - ang_min + ang_inc / 2) // ang_inc)   # Get laser index from angle
 
+                # Check if grid is visible
+                if 0 <= k < len(ranges) and r <= min(max_dist, ranges[k] + pos_tol):
                     # Compute inverse_range_sensor_model
-                    value = 0
-                    if r > min(max_dist, z + pos_tol) or abs(phi - theta_k) > ang_tol:
-                        value = self.prior[r,c]
-                    elif z < max_dist and abs(r - z) < pos_tol:
-                        value = L_OCC
+                    z = ranges[k]                                   # Range reading
+                    if z < max_dist and abs(r - z) < pos_tol:
+                        self.state[r,c] += L_OCC - self.prior[r,c]
                     elif r <= z:
-                        value = L_FREE
-
-                    self.state[r,c] += value - self.prior[r,c]
-
-                # Else, leave it the same
+                        self.state[r,c] += L_FREE - self.prior[r,c]
+                # Else: don't update logodds
 
         # TODO: publish occupancy
+        probs = 1 - (1 / (1 + np.exp(self.state)))
+
+        msg = OccupancyGrid()
+        msg.info = self.info
+        msg.data = probs.flatten().tobytes()
+        self.pub_occ.publish(msg)
 
 
 #
