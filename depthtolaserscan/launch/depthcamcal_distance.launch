@@ -1,0 +1,16 @@
+<launch>
+  <!-- Run the RealSense Depth Camera Calibration: Distance. -->
+
+  <!-- Run the robot nodes to support RealSense depth camera calibration. -->
+  <!-- EQUIVALENTLY just run the regular system, including the RealSense. -->
+  <include file="$(find depthtolaserscan)/launch/depthcamcal_system.launch"/>
+
+  <!-- Start the depth camera calibration: distance. -->
+  <node name="depthcamcal_distance"
+	pkg ="depthtolaserscan"
+  	type="depthcamcal_distance.py"
+	output="screen">
+    <param name="min_height"  value="0.100"/>
+    <param name="max_height"  value="1.500"/>
+  </node>
+</launch>
