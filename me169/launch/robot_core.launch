@@ -2,7 +2,7 @@
     <!-- Map Yaml File. -->
     <arg name="map" default="$(find me169_shared)/maps/keck308corner.yaml"/>
 
-    <include file="$(find depthtolaserscan)/launch/laserscan.launch" />
+    <!-- <include file="$(find depthtolaserscan)/launch/laserscan.launch" /> -->
 
     <!-- Start the map server -->
     <node name="map_server"
@@ -16,10 +16,10 @@
   <node name="odometry"
     pkg="me169"
       type="odometry.py"/>
-  <!-- <node name="localization"
+  <node name="localization"
     pkg="me169"
-      type="localization.py"/> -->
-  <!-- <node name="simpledriver"
+      type="localization.py"/>
+  <node name="simpledriver"
     pkg="me169"
-      type="simpledriver.py"/> -->
+      type="simpledriver.py"/>
 </launch>

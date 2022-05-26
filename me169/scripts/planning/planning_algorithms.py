@@ -4,6 +4,7 @@ import numpy as np
 from nav_msgs.msg       import OccupancyGrid
 
 from planar_transform import PlanarTransform
+from occupancy_map import OccupancyMap
 from planning_util import TileStates, PriorityQueue
 
 
@@ -87,6 +88,8 @@ def astar_search(start, end, reachable, get_neighbors):
     if not found:
         raise SearchError("Could not reach the goal state.")
 
+    # return list(state.keys())
+
     # Walk the search path
     path = [curr]                      # Populated backwards from `end`
     curr = tuple(parent[curr])
@@ -102,37 +105,10 @@ class AStarPlan:
 
     def __init__(self):
         # Declare variables (not initialized)
-        self.map = None
-
-        self.w = 0
-        self.h = 0
-        self.grid = None
-
-        self.res = 0
-        self.map2grid = None
+        self.occ_map = None
 
     def update_map(self, map_msg: OccupancyGrid):
-        self.map = map_msg
-
-        # Setup Grid
-        self.w = self.map.info.width
-        self.h = self.map.info.height
-        self.grid = np.array(map_msg.data).reshape((self.h, self.w))
-
-        # Setup transforms
-        g_x = map_msg.info.origin.position.x
-        g_y = map_msg.info.origin.position.y
-        g_qz = map_msg.info.origin.orientation.z
-        g_qw = map_msg.info.origin.orientation.w
-
-        self.res = map_msg.info.resolution
-        self.map2grid = PlanarTransform(g_x, g_y, g_qz, g_qw)
-
-    def to_map(self, pts):
-        return self.map2grid.apply(self.res * pts)
-        
-    def to_grid(self, pts):
-        return (self.map2grid.inv().apply(pts) / self.res).round().astype(int)
+        self.occ_map = OccupancyMap(map_msg)
 
     def near_nodes(self, r, c, s):
         """ Return list of ((row, col), dist) neighbors """
@@ -145,7 +121,7 @@ class AStarPlan:
     def next_to_wall(self, r, c):
         for coord, _ in self.near_nodes(r, c, math.ceil(BOT_RAD / self.res)):
             s = self.grid[coord]
-            if s > OCC_THRESH or s < 0:
+            if s >= OCC_THRESH or s < 0:
                 return True
 
     def neighbors(self, coord, s=1):
@@ -164,19 +140,25 @@ class AStarPlan:
         return abs(r2 - r1) <= s and abs(c2 - c1) <= s
 
     def search(self, start, end):
-        if not self.map:
+        if not self.occ_map:
             raise SearchError("Did not set map")
 
         # Reverse dimensions from (x,y) -> (r,c)
-        grid_start = tuple(reversed(self.to_grid(np.array(start))))
-        grid_end = tuple(reversed(self.to_grid(np.array(end))))
+        grid_start = tuple(reversed(self.occ_map.to_grid(np.array(start))))
+        grid_end = tuple(reversed(self.occ_map.to_grid(np.array(end))))
 
         # Find path with A*
         path = astar_search(grid_start, grid_end, self.end_inrange, self.neighbors)
 
+        # for r in range(self.h):
+        #     for c in range(self.w):
+        #         s = self.grid[r,c]
+        #         if s >= OCC_THRESH or s < 0:
+        #             path.append((r,c))
+
         # Reverse dimensions from (r,c) -> (x,y)
         path = [(x, y) for y, x in path]
-        return self.to_map(np.array(path))
+        return self.occ_map.to_map(np.array(path))
 
 
     # def __search__(self, start, end, cost_func=astar_cost):

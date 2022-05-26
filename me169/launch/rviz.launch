@@ -1,8 +1,6 @@
 <launch>
   <!-- Rviz configuration file parameter. -->
   <arg name="cfg"   default="$(find depthtolaserscan)/rviz/laserscan.rviz"/>
-  
-  <!-- <include file="$(find me169)/launch/robot_core.launch" /> -->
 
   <!-- Run the rviz visualization, with the specified config file -->
   <!-- Kill everything if this stops. -->

@@ -33,8 +33,8 @@ EPSILON = 1e-5
 
 def laser2cart(scan: LaserScan):
     """ Returns a tuple (pts, weights) """
-    # r = np.array(scan.ranges) * CORR_M + CORR_B
-    r = np.array(scan.ranges)
+    r = np.array(scan.ranges) * CORR_M + CORR_B
+    # r = np.array(scan.ranges)
     t = np.linspace(scan.angle_min, scan.angle_max, len(r))
     idxs = np.where(r < MAX_DIST_FROM_ROBOT)
     r = r[idxs]

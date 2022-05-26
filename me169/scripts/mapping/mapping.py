@@ -1,9 +1,24 @@
+#!/usr/bin/env python3
+#
+#   simpledriver.py
+#
+#   Drive controller node.  This
+#   (a) converts a comparison between current pose and target pose into body velocity commands.
+#
+#   Node:       /local_driver
+#   Publish:    /vel_cmd                geometry_msgs/Twist
+#   Subscribe:  /pose                   geometry_msgs/PoseStamped
+#               /move_base_simple/goal  geometry_msgs/PoseStamped
+#               /scan                   sensor_msgs/LaserScan
+#
 import rospy
 import numpy as np
 
 from geometry_msgs.msg  import PoseStamped, Pose
 from nav_msgs.msg       import OccupancyGrid, MapMetaData
 from sensor_msgs.msg    import LaserScan
+
+from occupancy_map import MapTransform
 
 
 CORR_M = 1.1
@@ -49,12 +64,12 @@ class Mapping:
         mh = self.map.info.height
         map_grid = np.array(self.map.data).reshape((mh, mw))
         map_grid[map_grid == UNKNOWN] = 1
-        self.grid = maxpool(map_grid, (K,K))
+        self.grid = maxpool(map_grid, (K,K)) / 100
         self.w, self.h = self.grid.shape
         self.res = self.map.info.resolution * K
 
         # Compute prior and initialize logodds state
-        self.prior = np.log(self.grid / (1 - self.grid))
+        self.prior = np.log(self.grid / (1 - self.grid + EPSILON) + EPSILON)
         self.state = self.prior.copy()      # Logodds of occupancy belief
 
         # Setup map info
@@ -64,6 +79,11 @@ class Mapping:
         self.info.width = self.w
         self.info.height = self.h
         self.info.origin = self.map.info.origin
+
+        # Grid-to-map coords 
+        self.map_tf: MapTransform = MapTransform(self.info)
+        pts = np.array([(c+0.5,r+0.5) for r in range(self.h) for c in range(self.w)])
+        self.map_pts = self.map_tf.to_map(pts).reshape((self.h, self.w, 2))
 
         # State Variables
         self.last_pose = PoseStamped()
@@ -90,6 +110,9 @@ class Mapping:
 
     def cb_timer(self, event):
         """ Update the map and publish """
+        if abs((rospy.Time.now() - self.last_scan.header.stamp).to_sec()) > 1:
+            return
+
         # Robot pose
         rx = self.last_pose.pose.position.x         # Robot x-coord
         ry = self.last_pose.pose.position.y         # Robot y-coord
@@ -104,33 +127,35 @@ class Mapping:
         pos_tol = self.res / 2
 
         # Laser data
-        ranges = self.last_scan.ranges
+        ranges = np.array(self.last_scan.ranges) * CORR_M + CORR_B
 
         # TODO: only iterate through grid spaces that are in-range
         # Update occupancy
         for r in range(self.h):
-            y = (r+0.5) * self.res                                  # Center of grid
-            dy = y-ry                                               # Vec from robot
+            # y = (r+0.5) * self.res                                  # Center of grid
             for c in range(self.w):
-                x = (c+0.5) * self.res                              # Center of grid
+                # x = (c+0.5) * self.res                              # Center of grid
+                x, y = self.map_pts[r, c]
                 dx = x-rx                                           # Vec from robot
+                dy = y-ry                                           # Vec from robot
 
-                r = np.sqrt(dx*dx + dy*dy)                          # Dist to robot
-                phi = np.atan2(dy, dx) - rt                         # Robot -> Grid angle
+                d = np.sqrt(dx*dx + dy*dy)                          # Dist to robot
+                phi = np.arctan2(dy, dx) - rt                       # Robot -> Grid angle
                 k = int((phi - ang_min + ang_inc / 2) // ang_inc)   # Get laser index from angle
 
                 # Check if grid is visible
-                if 0 <= k < len(ranges) and r <= min(max_dist, ranges[k] + pos_tol):
+                if 0 <= k < len(ranges) and d <= min(max_dist, ranges[k] + pos_tol):
                     # Compute inverse_range_sensor_model
                     z = ranges[k]                                   # Range reading
-                    if z < max_dist and abs(r - z) < pos_tol:
+                    if z < max_dist and abs(d - z) < pos_tol:
                         self.state[r,c] += L_OCC - self.prior[r,c]
-                    elif r <= z:
+                    elif d <= z:
                         self.state[r,c] += L_FREE - self.prior[r,c]
                 # Else: don't update logodds
 
         # TODO: publish occupancy
         probs = 1 - (1 / (1 + np.exp(self.state)))
+        probs = (probs * 100).astype(np.uint8)
 
         msg = OccupancyGrid()
         msg.info = self.info
