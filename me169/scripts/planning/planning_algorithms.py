@@ -150,28 +150,32 @@ class AStarPlan:
 
     def neighbors(self, coord, s=1):
         """ Returns all in-bound neighbors of a coord """
-        c, r = coord        # Given as x,y coords
+        r, c = coord
         neighborhood = self.near_nodes(r, c, s)
         neighborhood_filtered = []
         for (r, c), dist in neighborhood:
             if (0 <= r < self.h) and (0 <= c < self.w) and not self.next_to_wall(r, c):
-                neighborhood_filtered.append(((c,r), dist))     # Return as (x,y)
+                neighborhood_filtered.append(((r,c), dist))
         return neighborhood_filtered
 
     def end_inrange(self, pos, end, s=1):
-        x1, y1 = pos
-        x2, y2 = end
-        return abs(x2 - x1) <= s and abs(y2 - y1) <= s
+        r1, c1 = pos
+        r2, c2 = end
+        return abs(r2 - r1) <= s and abs(c2 - c1) <= s
 
     def search(self, start, end):
         if not self.map:
             raise SearchError("Did not set map")
 
-        # NOTE: May have to reverse dimensions
-        grid_start = tuple(self.to_grid(np.array(start)))
-        grid_end = tuple(self.to_grid(np.array(end)))
+        # Reverse dimensions from (x,y) -> (r,c)
+        grid_start = tuple(reversed(self.to_grid(np.array(start))))
+        grid_end = tuple(reversed(self.to_grid(np.array(end))))
 
+        # Find path with A*
         path = astar_search(grid_start, grid_end, self.end_inrange, self.neighbors)
+
+        # Reverse dimensions from (r,c) -> (x,y)
+        path = [(x, y) for y, x in path]
         return self.to_map(np.array(path))
 
 
