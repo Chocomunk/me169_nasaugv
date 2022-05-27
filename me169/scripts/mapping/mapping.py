@@ -17,12 +17,19 @@ import numpy as np
 from geometry_msgs.msg  import PoseStamped, Pose
 from nav_msgs.msg       import OccupancyGrid, MapMetaData
 from sensor_msgs.msg    import LaserScan
+from visualization_msgs.msg import Marker
+from geometry_msgs.msg  import Point
 
 from occupancy_map import MapTransform
 
 
-CORR_M = 1.1
-CORR_B = 0.162
+# CORR_M = 1.1
+# CORR_M = .9
+# CORR_B = 0.162
+# CORR_B = 0
+CORR_A = -2.14e-3
+CORR_B = 1.11
+CORR_C = 0.154
 MAX_DIST_FROM_ROBOT = 4.1
 EPSILON = 1e-5
 
@@ -63,8 +70,10 @@ class Mapping:
         mw = self.map.info.width
         mh = self.map.info.height
         map_grid = np.array(self.map.data).reshape((mh, mw))
-        map_grid[map_grid == UNKNOWN] = 1
         self.grid = maxpool(map_grid, (K,K)) / 100
+        self.grid[self.grid < 0] = OCC_THRESH
+        self.grid[self.grid > OCC_THRESH] = OCC_THRESH
+        self.grid[self.grid < FREE_THRESH] = FREE_THRESH
         self.w, self.h = self.grid.shape
         self.res = self.map.info.resolution * K
 
@@ -94,6 +103,8 @@ class Mapping:
         # Create a publisher to map space pose.
         self.pub_occ = rospy.Publisher('/occupy', OccupancyGrid,
                                         queue_size=10)
+        self.pub_gridpts = rospy.Publisher('/gridpts', Marker,
+                                        queue_size=10)
 
         # Create a subscriber to listen to odometry.
         rospy.Subscriber('/pose', PoseStamped, self.cb_pose)
@@ -111,6 +122,7 @@ class Mapping:
     def cb_timer(self, event):
         """ Update the map and publish """
         if abs((rospy.Time.now() - self.last_scan.header.stamp).to_sec()) > 1:
+            print("SKIPPING")
             return
 
         # Robot pose
@@ -124,10 +136,12 @@ class Mapping:
         ang_min = self.last_scan.angle_min
         ang_inc = self.last_scan.angle_increment
         max_dist = self.last_scan.range_max
-        pos_tol = self.res / 2
+        pos_tol = self.res / 1.5
 
         # Laser data
-        ranges = np.array(self.last_scan.ranges) * CORR_M + CORR_B
+        ranges = np.array(self.last_scan.ranges)
+        # ranges = CORR_A * np.square(ranges) + CORR_B * ranges + CORR_C
+        # ranges = np.array(self.last_scan.ranges) * CORR_M + CORR_B
 
         # TODO: only iterate through grid spaces that are in-range
         # Update occupancy
@@ -149,7 +163,7 @@ class Mapping:
                     z = ranges[k]                                   # Range reading
                     if z < max_dist and abs(d - z) < pos_tol:
                         self.state[r,c] += L_OCC - self.prior[r,c]
-                    elif d <= z:
+                    elif d < z:
                         self.state[r,c] += L_FREE - self.prior[r,c]
                 # Else: don't update logodds
 
@@ -161,6 +175,34 @@ class Mapping:
         msg.info = self.info
         msg.data = probs.flatten().tobytes()
         self.pub_occ.publish(msg)
+        self.pub_grid(self.map_pts)
+
+    def pub_grid(self, gridpts):
+        msg = Marker()
+        msg.header.frame_id = "map"
+        msg.type = Marker.POINTS
+        msg.action = Marker.ADD
+
+        s = 0.02
+        msg.scale.x = s
+        msg.scale.y = s
+        msg.scale.z = s
+
+        msg.color.a = 1.0
+        msg.color.r = 1
+        msg.color.g = 0
+        msg.color.b = 1
+
+        pts = []
+        for i in range(self.h):
+            for j in range(self.w):
+                pt = Point()
+                pt.x = gridpts[i,j,0]
+                pt.y = gridpts[i,j,1]
+                pts.append(pt)
+        
+        msg.points = pts
+        self.pub_gridpts.publish(msg)
 
 
 #

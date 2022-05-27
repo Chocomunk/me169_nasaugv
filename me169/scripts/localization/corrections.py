@@ -5,6 +5,8 @@ from scipy.spatial import cKDTree
 
 from nav_msgs.msg import OccupancyGrid
 from std_msgs.msg import Float32
+from visualization_msgs.msg import Marker
+from geometry_msgs.msg  import Point
 
 from planar_transform import PlanarTransform
 
@@ -58,21 +60,52 @@ class IdentityCorrection:
     def get_tf(self):
         return self.identity_tf
     
-    def update(self, laserpts):
+    def update(self, laserpts, weights=None):
         # Do nothing for now, keep returning the identity transform
-        pass
+        return laserpts
 
 
 class BasicLeastSquaresCorrection:
 
     def __init__(self, mapgrid: OccupancyGrid):
         self.map = mapgrid
-        self.walltree = cKDTree(wall_points(mapgrid))
+        wallpts = wall_points(mapgrid)
+        self.walltree = cKDTree(wallpts)
         self.correction = PlanarTransform.basic(0, 0, 0)
         self.x_pub = rospy.Publisher("/corrx", Float32, queue_size=10)
         self.y_pub = rospy.Publisher("/corry", Float32, queue_size=10)
         self.t_pub = rospy.Publisher("/corrt", Float32, queue_size=10)
         self.m_pub = rospy.Publisher("/corrm", Float32, queue_size=10)
+
+        self.pub_wallpts = rospy.Publisher('/wallpts', Marker,
+                                        queue_size=10)
+        self.pub_wall(wallpts)
+
+    def pub_wall(self, wallpts):
+        msg = Marker()
+        msg.header.frame_id = "map"
+        msg.type = Marker.POINTS
+        msg.action = Marker.ADD
+
+        s = 0.05
+        msg.scale.x = s
+        msg.scale.y = s
+        msg.scale.z = s
+
+        msg.color.a = 1.0
+        msg.color.r = 1
+        msg.color.g = 0
+        msg.color.b = 1
+
+        pts = []
+        for i in range(len(wallpts)):
+            pt = Point()
+            pt.x = wallpts[i,0]
+            pt.y = wallpts[i,1]
+            pts.append(pt)
+        
+        msg.points = pts
+        self.pub_wallpts.publish(msg)
 
     def get_tf(self):
         return FRACTION * self.correction
@@ -80,6 +113,8 @@ class BasicLeastSquaresCorrection:
     def update(self, laserpts, weights=None):
         idxs, wallnear = self.nearest_wallpts(laserpts)
         pts = laserpts[idxs]
+
+        self.pub_wall(wallnear)
 
         if weights is None:
             lam = np.eye(len(pts) * 2)

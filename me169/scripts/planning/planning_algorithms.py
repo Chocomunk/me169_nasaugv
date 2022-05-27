@@ -8,8 +8,8 @@ from occupancy_map import OccupancyMap
 from planning_util import TileStates, PriorityQueue
 
 
-OCC_THRESH = 0.65
-FREE_THRESH = 0.196
+OCC_THRESH = 0.65 * 100
+FREE_THRESH = 0.196 * 100
 BOT_RAD = 0.15
 
 
@@ -79,6 +79,7 @@ def astar_search(start, end, reachable, get_neighbors):
     found = False
     while not q.is_empty():
         curr = pop()                            # Get the next lowest-cost leaf
+        print(curr)
         if reachable(curr, end):                # If it is the goal, we finished!
             found = True
             break
@@ -105,23 +106,31 @@ class AStarPlan:
 
     def __init__(self):
         # Declare variables (not initialized)
+        self.h, self.w = 0, 0
         self.occ_map = None
 
     def update_map(self, map_msg: OccupancyGrid):
+        self.w = map_msg.info.width
+        self.h = map_msg.info.height
+        self.res = map_msg.info.resolution
+        self.grid = np.array(map_msg.data).reshape((self.h, self.w))
         self.occ_map = OccupancyMap(map_msg)
 
     def near_nodes(self, r, c, s):
         """ Return list of ((row, col), dist) neighbors """
         d = np.sqrt(2) * s
-        return [
+        neighbors = [
             ((r+s, c+s), d), ((r-s, c-s), d), ((r-s, c+s), d), ((r+s, c-s), d), 
             ((r+s, c), s),   ((r-s, c), s),   ((r, c+s), s),   ((r, c-s), s)
         ]
+        return [((r,c), d) for (r,c), d in neighbors 
+                if (0 <= r < self.h) and (0 <= c < self.w)]
 
     def next_to_wall(self, r, c):
-        for coord, _ in self.near_nodes(r, c, math.ceil(BOT_RAD / self.res)):
+        for coord, _ in self.near_nodes(r, c, int(0.5 + BOT_RAD / self.res)):
+            print(coord, self.grid[coord])
             s = self.grid[coord]
-            if s >= OCC_THRESH or s < 0:
+            if s >= OCC_THRESH:
                 return True
 
     def neighbors(self, coord, s=1):
@@ -130,8 +139,10 @@ class AStarPlan:
         neighborhood = self.near_nodes(r, c, s)
         neighborhood_filtered = []
         for (r, c), dist in neighborhood:
-            if (0 <= r < self.h) and (0 <= c < self.w) and not self.next_to_wall(r, c):
+            if not self.next_to_wall(r, c):
                 neighborhood_filtered.append(((r,c), dist))
+            else:
+                print((r,c))
         return neighborhood_filtered
 
     def end_inrange(self, pos, end, s=1):

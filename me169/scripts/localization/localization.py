@@ -25,16 +25,22 @@ from planar_transform import PlanarTransform
 from corrections import IdentityCorrection, BasicLeastSquaresCorrection
 
 
-CORR_M = 1.1
-CORR_B = 0.162
-MAX_DIST_FROM_ROBOT = 4.1
+# CORR_M = 1.1
+# CORR_M = .9
+# CORR_B = 0.162
+# CORR_B = 0
+CORR_A = -2.14e-3
+CORR_B = 1.11
+CORR_C = 0.154
+MAX_DIST_FROM_ROBOT = 2.5
 EPSILON = 1e-5
 
 
 def laser2cart(scan: LaserScan):
     """ Returns a tuple (pts, weights) """
-    r = np.array(scan.ranges) * CORR_M + CORR_B
-    # r = np.array(scan.ranges)
+    # r = np.array(scan.ranges) * CORR_M + CORR_B
+    r = np.array(scan.ranges)
+    # r = CORR_A * np.square(r) + CORR_B * r + CORR_C
     t = np.linspace(scan.angle_min, scan.angle_max, len(r))
     idxs = np.where(r < MAX_DIST_FROM_ROBOT)
     r = r[idxs]
@@ -126,6 +132,7 @@ class Localization:
         laserpts, weights = laser2cart(self.last_scan)
         laser_map = map2laser.apply(laserpts)
 
+        weights = None
         laser_inrange = self.correction.update(laser_map, weights=weights)
         self.pub_laser_map(laser_inrange, msg)
 

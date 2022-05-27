@@ -30,17 +30,16 @@ POS_TOL = 0.15              # (meters)
 class Planner:
     # Initialize.
     def __init__(self):
-        # Wait 30sec for a map.
-        rospy.loginfo("Waiting for a map...")
-        self.mapmsg: OccupancyGrid = rospy.wait_for_message("/map", OccupancyGrid, 30.0)
+        # # Wait 30sec for a map.
+        # rospy.loginfo("Waiting for a map...")
+        # self.mapmsg: OccupancyGrid = rospy.wait_for_message("/map", OccupancyGrid, 30.0)
         
         # Define Variables
         self.last_pose = PoseStamped()
         self.nav_goal = PoseStamped()
-        self.last_scan = LaserScan()
+        self.last_map = None
 
         self.planner = AStarPlan()
-        self.planner.update_map(self.mapmsg)
         self.reached_goal = True
         self.waypts = []
 
@@ -60,7 +59,7 @@ class Planner:
         rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.cb_nav_goal)
 
         # Create a subscriber to listen to the laser scan.
-        rospy.Subscriber('/scan', LaserScan, self.cb_laser)
+        rospy.Subscriber('/occupy', OccupancyGrid, self.cb_occupy)
 
     def cb_nav_goal(self, msg: PoseStamped):
         assert (msg.header.frame_id == "map"), "Nav goal not in map frame"
@@ -82,8 +81,9 @@ class Planner:
     def cb_pose(self, msg: PoseStamped):
         self.last_pose = msg
 
-    def cb_laser(self, msg: LaserScan):
-        self.last_scan = msg
+    def cb_occupy(self, msg: OccupancyGrid):
+        self.last_map = msg
+        self.planner.update_map(msg)
 
     def cb_timer(self, event):
         if not self.reached_goal:
@@ -116,7 +116,7 @@ class Planner:
         msg.type = Marker.POINTS
         msg.action = Marker.ADD
 
-        s = self.mapmsg.info.resolution
+        s = self.last_map.info.resolution
         msg.scale.x = s
         msg.scale.y = s
         msg.scale.z = s
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     rospy.init_node('planner')
 
     # Define durations
-    duration = rospy.Duration(1. / 10)       # 10 Hz
+    duration = rospy.Duration(1. / 5)       # 5 Hz
     dt       = duration.to_sec()
 
     # Instantiate the Planner object
