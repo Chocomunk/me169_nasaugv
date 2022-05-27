@@ -89,8 +89,6 @@ def astar_search(start, end, reachable, get_neighbors):
     if not found:
         raise SearchError("Could not reach the goal state.")
 
-    # return list(state.keys())
-
     # Walk the search path
     path = [curr]                      # Populated backwards from `end`
     curr = tuple(parent[curr])
@@ -161,136 +159,7 @@ class AStarPlan:
         # Find path with A*
         path = astar_search(grid_start, grid_end, self.end_inrange, self.neighbors)
 
-        # for r in range(self.h):
-        #     for c in range(self.w):
-        #         s = self.grid[r,c]
-        #         if s >= OCC_THRESH or s < 0:
-        #             path.append((r,c))
 
         # Reverse dimensions from (r,c) -> (x,y)
         path = [(x, y) for y, x in path]
         return self.occ_map.to_map(np.array(path))
-
-
-    # def __search__(self, start, end, cost_func=astar_cost):
-    #     """
-    #     Perform a discrete planning search over the given problem definition and
-    #     defined cost function. The cost function should be able to take:
-    #         cost_to_reach, current_coordinate, end_coordinate
-
-    #     Returns: path A list storing the coordinates of the resulting path (ordered)
-    #     """
-    #     # NOTE: NEEDED
-    #     start = tuple(reversed(self.to_grid(np.array(start))))
-    #     end = tuple(reversed(self.to_grid(np.array(end))))
-
-    #     # Don't modify the original state
-    #     state = np.copy(self.state)
-    #     M, N = self.h, self.w                       # Get dimensions (row, col)
-
-    #     cost_to_reach = np.ones((M,N)) * np.inf     # Initialize costs to inf
-    #     parent = np.zeros((M,N,2), dtype=int) - 1   # Initialize parent table to (-1,-1)
-
-    #     # --------------------- Priority Queue interaction -------------------------
-    #     #   These inner functions will be used to more cleanly interact with the
-    #     #   priority queue backend. Every push/pop operation requires the same
-    #     #   supporting operations (e.g. updating cost and parents), so we wrap them
-    #     #   in functions to make the main algorithm loop more readable
-
-    #     q = PriorityQueue()         # Define the p-queue of ONDECK states
-
-    #     def push(coord, c, par):
-    #         """ Push an element `coord` with cost-to-reach `c` and parent `par` """
-    #         s = state[coord]
-    #         child_cost = cost_func(cost_to_reach=c, 
-    #                                 coord=coord, start=start, end=end)
-
-    #         # This tile was not encountered yet
-    #         if s == TileStates.UNKNOWN:
-    #             q.push(coord, child_cost)
-    #             state[coord] = TileStates.ONDECK
-    #             if par:
-    #                 cost_to_reach[coord] = c
-    #                 parent[coord] = par
-
-    #         # This tile was seen in another path
-    #         elif s == TileStates.ONDECK:
-    #             # Newer path is lower cost, so update to new
-    #             if c < cost_to_reach[coord]:
-    #                 q.remove(coord)
-    #                 q.push(coord, child_cost)
-    #                 if par:
-    #                     cost_to_reach[coord] = c
-    #                     parent[coord] = par
-
-    #         # else: do nothing
-
-    #     def pop():
-    #         """ Pop an element from the p-queue """
-    #         coord = q.pop()
-    #         if state[coord] == TileStates.WALL:
-    #             print("Big problem")
-    #         state[coord] = TileStates.PROCESSED
-    #         return coord
-
-    #     # ----------------------- Utility Inner Functions -------------------------- 
-
-    #     def near_nodes(r, c, s):
-    #         d = np.sqrt(2) * s
-    #         return [
-    #                 ((r+s, c+s), d), ((r-s, c-s), d), ((r-s, c+s), d), ((r+s, c-s), d), 
-    #                 ((r+s, c), s),   ((r-s, c), s),   ((r, c+s), s),   ((r, c-s), s)
-    #                 ]
-
-    #     def next_to_wall(r, c):
-    #         for coord, _ in near_nodes(r, c, math.ceil(BOT_RAD / self.res)):
-    #             if state[coord] == TileStates.WALL:
-    #                 return True
-
-    #     def neighbors(coord, s=5):
-    #         """ Returns all in-bound neighbors of a coord """
-    #         r, c = coord
-    #         total = near_nodes(r, c, s)
-    #         filt = []
-    #         for (r, c), a in total:
-    #             if (0 <= r < M) and (0 <= c < N) and not next_to_wall(r, c):
-    #                 filt.append(((r,c), a))
-    #         return filt
-
-    #     def inrange(a, b, s=5):
-    #         x1, y1 = a
-    #         x2, y2 = b
-    #         return abs(x2 - x1) <= s+1 and abs(y2 - y1) <= s+1
-
-    #     # ------------------------- Main Algorithm Loop ---------------------------- 
-
-    #     # Initialize search
-    #     push(start, 0, None)
-    #     cost_to_reach[start] = 0
-
-    #     # Perform search
-    #     found = False
-    #     while not q.is_empty():
-    #         curr = pop()            # Get the next lowest-cost leaf
-    #         if inrange(curr, end):          # If it is the goal, we finished!
-    #             found = True
-    #             break
-    #         for child, c in neighbors(curr):   # Otherwise, check every child
-    #             push(child, cost_to_reach[curr] + c, curr)
-
-    #     if not found:
-    #         raise SearchError("Could not reach the goal state.")
-
-    #     # Walk the search path
-    #     path = [curr]                      # Populated backwards from `end`
-    #     curr = tuple(parent[curr])
-
-    #     # Loop while the parent exists, the start node has no parent
-    #     while (parent[curr] != [-1, -1]).any():
-    #         path.append(curr)                       # Add to the path
-    #         curr = tuple(parent[curr])              # Step to the next parent
-    #     path = list(reversed(path))                 # Reverse the list into the right order.
-        
-    #     # NOTE: NEEDED
-    #     path = [(x, y) for y, x in path]
-    #     return self.to_map(np.array(path))

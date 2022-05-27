@@ -37,8 +37,8 @@ UNKNOWN = -1
 OCC_THRESH = 0.65
 FREE_THRESH = 0.196
 
-L_OCC = np.log(1 - EPSILON)
 L_FREE = np.log(EPSILON)
+L_OCC = -L_FREE
 
 
 def maxpool(mat, kernel_size):
