@@ -168,12 +168,12 @@ class Mapping:
                 ang_diff = AngleDiff(phi + ang_inc / 2, ang_min)
                 k = int(ang_diff // ang_inc)   # Get laser index from angle
 
+                # TODO: Clamp max occ and free
                 # Check if grid is visible
                 if 0 <= k < len(ranges) and d <= min(max_dist, ranges[k] + pos_tol):
                     # Compute inverse_range_sensor_model
                     z = ranges[k]                                   # Range reading
                     if z < max_dist and abs(d - z) <= pos_tol:
-                        print(self.state[r,c], L_OCC - self.prior[r,c])
                         self.state[r,c] += L_OCC - self.prior[r,c]
                     else:
                         self.state[r,c] += L_FREE - self.prior[r,c]

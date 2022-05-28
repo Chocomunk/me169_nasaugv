@@ -224,13 +224,13 @@ Visualization Manager:
       Use Timestamp: false
       Value: true
     - Class: rviz/Marker
-      Enabled: false
+      Enabled: true
       Marker Topic: /lasermap
       Name: Real LaserScan
       Namespaces:
-        {}
+        "": true
       Queue Size: 100
-      Value: false
+      Value: true
     - Class: rviz/Marker
       Enabled: true
       Marker Topic: /waypmap
@@ -254,14 +254,14 @@ Visualization Manager:
       Marker Topic: /wallpts
       Name: Nearby Wall Points
       Namespaces:
-        {}
+        "": true
       Queue Size: 100
       Value: true
     - Alpha: 0.6000000238418579
       Cell Size: 0.12700000405311584
       Class: rviz/Grid
       Color: 0; 200; 200
-      Enabled: true
+      Enabled: false
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
@@ -274,7 +274,7 @@ Visualization Manager:
       Plane: XY
       Plane Cell Count: 60
       Reference Frame: <Fixed Frame>
-      Value: true
+      Value: false
     - Class: rviz/Marker
       Enabled: true
       Marker Topic: /gridpts
@@ -310,7 +310,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0.010000070556998253
+      Angle: 0.020000074058771133
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -369,5 +369,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1280
-  X: 0
-  Y: 20
+  X: -2
+  Y: -4
