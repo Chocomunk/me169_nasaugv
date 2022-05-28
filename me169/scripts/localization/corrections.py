@@ -7,15 +7,19 @@ from nav_msgs.msg import OccupancyGrid
 from std_msgs.msg import Float32
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg  import Point
+from sensor_msgs.msg    import LaserScan
 
 from planar_transform import PlanarTransform
 
 
 WALLTHRESHOLD = 65      # Believe probability TODO: read from map yaml
-MAXDISTANCE = 0.5         # Distance to wall
-FRACTION = 0.03            # Correction dampening
+MAXDISTANCE = 0.2         # Distance to wall
+FRACTION = 0.05            # Correction dampening
 POS_LIM = 0.3           # Limit for position correction (meters)
 THETA_LIM = np.pi / 12  # Limit for angle correction (radians)
+
+MAX_DIST_FROM_ROBOT = 2.5
+EPSILON = 1e-5
 
 
 def wall_points(mapgrid: OccupancyGrid):
@@ -48,6 +52,18 @@ def wall_points(mapgrid: OccupancyGrid):
     return map_wallpts
 
 
+def laser2cart(scan: LaserScan):
+    """ Returns a tuple (pts, weights) """
+    # r = np.array(scan.ranges) * CORR_M + CORR_B
+    r = np.array(scan.ranges)
+    # r = CORR_A * np.square(r) + CORR_B * r + CORR_C
+    t = np.linspace(scan.angle_min, scan.angle_max, len(r))
+    idxs = np.where(r < MAX_DIST_FROM_ROBOT)
+    r = r[idxs]
+    t = t[idxs]
+    return r[:,None] * np.array((np.cos(t), np.sin(t))).T, (1 / (r + EPSILON)).flatten()
+
+
 #
 #   Localization Correction
 #
@@ -56,13 +72,10 @@ class IdentityCorrection:
     def __init__(self, map: OccupancyGrid):
         self.map = map      # Not needed, but store for reference
         self.identity_tf = PlanarTransform.basic(0, 0, 0)
-
-    def get_tf(self):
-        return self.identity_tf
     
-    def update(self, laserpts, weights=None):
+    def update(self, scan: LaserScan, map2laser: PlanarTransform):
         # Do nothing for now, keep returning the identity transform
-        return laserpts
+        return self.identity_tf
 
 
 class BasicLeastSquaresCorrection:
@@ -71,15 +84,64 @@ class BasicLeastSquaresCorrection:
         self.map = mapgrid
         wallpts = wall_points(mapgrid)
         self.walltree = cKDTree(wallpts)
-        self.correction = PlanarTransform.basic(0, 0, 0)
-        self.x_pub = rospy.Publisher("/corrx", Float32, queue_size=10)
-        self.y_pub = rospy.Publisher("/corry", Float32, queue_size=10)
-        self.t_pub = rospy.Publisher("/corrt", Float32, queue_size=10)
-        self.m_pub = rospy.Publisher("/corrm", Float32, queue_size=10)
-
         self.pub_wallpts = rospy.Publisher('/wallpts', Marker,
                                         queue_size=10)
-        self.pub_wall(wallpts)
+        self.pub_lasmap = rospy.Publisher('/lasermap', Marker,
+                                        queue_size=10)
+    
+    def update(self, scan: LaserScan, map2laser: PlanarTransform):
+        laserpts, weights = laser2cart(scan)
+        laserpts = map2laser.apply(laserpts)
+
+        idxs, wallnear = self.nearest_wallpts(laserpts)
+        pts = laserpts[idxs]
+        self.pub_wall(wallnear)
+        self.pub_laser_map(pts, scan)
+
+        # wts = weights[idxs]
+        # dbl_wts = np.tile(wts, (2,1)).swapaxes(0,1).flatten()
+        # lam = np.diag(dbl_wts)
+
+        lam = np.diag(weights[idxs])
+
+        lam *= len(idxs) / len(scan.ranges)
+        lam = np.square(lam)
+
+        # r = pts.flatten()
+        # p = wallnear.flatten()
+        # a = p-r
+
+        # rhs = (np.flip(pts, axis=1) * np.array([[-1, 1]])).flatten()[:,None]
+        # lhs = np.tile(np.eye(2), (len(pts), 1))
+        # J = np.hstack((lhs, rhs))
+
+        r = pts
+        p = wallnear
+        a = np.linalg.norm(p-r, axis=1)[:,None]
+
+        lhs = p-r
+        rhs = np.sum(r * np.flip(p, axis=1) * np.array([[1, -1]]), axis=1)[:,None]
+        J = np.divide(np.hstack((lhs, rhs)), a)
+
+        b = J.T @ lam
+        J_dag = np.linalg.pinv(b @ J) @ b
+        d = (J_dag @ a).flatten()
+        assert (d.shape == (3,)), "Wrong delta dimensions: {0} != (3,)".format(d.shape)
+
+        m = np.linalg.norm(d)
+        if m > POS_LIM:
+            d *= POS_LIM / m
+        x, y, t = d
+
+        return FRACTION * PlanarTransform.basic(x, y, t)
+
+    def nearest_wallpts(self, pts):
+        dists, idxs = self.walltree.query(pts)
+
+        inrange = np.where(dists < MAXDISTANCE)
+        idxs = idxs[inrange]
+
+        return inrange, self.walltree.data[idxs, :]
 
     def pub_wall(self, wallpts):
         msg = Marker()
@@ -107,71 +169,30 @@ class BasicLeastSquaresCorrection:
         msg.points = pts
         self.pub_wallpts.publish(msg)
 
-    def get_tf(self):
-        return FRACTION * self.correction
-    
-    def update(self, laserpts, weights=None):
-        idxs, wallnear = self.nearest_wallpts(laserpts)
-        pts = laserpts[idxs]
+    def pub_laser_map(self, laser_map, scan):
+        msg = Marker()
+        msg.header.frame_id = "map"
+        msg.header.stamp = scan.header.stamp
+        msg.type = Marker.POINTS
+        msg.action = Marker.ADD
 
-        self.pub_wall(wallnear)
+        s = 0.05
+        msg.scale.x = s
+        msg.scale.y = s
+        msg.scale.z = s
 
-        if weights is None:
-            lam = np.eye(len(pts) * 2)
-        else:
-            wts = weights[idxs]
-            dbl_wts = np.tile(wts, (2,1)).swapaxes(0,1).flatten()
-            lam = np.diag(dbl_wts)
+        msg.color.a = 1.0
+        msg.color.r = 0
+        msg.color.g = 0
+        msg.color.b = 1
 
-        r = pts.flatten()
-        p = wallnear.flatten()
-        a = p-r
-
-        rhs = (np.flip(pts, axis=1) * np.array([[-1, 1]])).flatten()[:,None]
-        lhs = np.tile(np.eye(2), (len(pts), 1))
-        J = np.hstack((lhs, rhs))
-
-        # if weights is None:
-        #     lam = np.eye(len(pts))
-        # else:
-        #     lam = np.diag(weights[idxs])
-
-        # r = pts
-        # p = wallnear
-        # a = np.linalg.norm(p-r, axis=1)[:,None]
-
-        # lhs = p-r
-        # rhs = np.sum(r * np.flip(p, axis=1) * np.array([[1, -1]]), axis=1)[:,None]
-        # J = np.divide(np.hstack((lhs, rhs)), a)
-
-        b = J.T @ lam
-        J_dag = np.linalg.pinv(b @ J) @ b
-        d = (J_dag @ a).flatten()
-        assert (d.shape == (3,)), "Wrong delta dimensions: {0} != (3,)".format(d.shape)
-
-        m = np.linalg.norm(d)
-        if m > POS_LIM:
-            d *= POS_LIM / m
-        x, y, t = d
-
-        # t_abs = np.abs(t)
-        # if t_abs > THETA_LIM:
-        #     d *= THETA_LIM / t_abs
-
-        self.x_pub.publish(x)
-        self.y_pub.publish(y)
-        self.t_pub.publish(t)
-        self.m_pub.publish(np.linalg.norm(d))
-
-        self.correction = PlanarTransform.basic(x, y, t)
-
-        return pts
-
-    def nearest_wallpts(self, pts):
-        dists, idxs = self.walltree.query(pts)
-
-        inrange = np.where(dists < MAXDISTANCE)
-        idxs = idxs[inrange]
-
-        return inrange, self.walltree.data[idxs, :]
+        pts = []
+        for i in range(len(laser_map)):
+            pt = Point()
+            pt.x = laser_map[i,0]
+            pt.y = laser_map[i,1]
+            pts.append(pt)
+        
+        msg.points = pts
+        self.pub_lasmap.publish(msg)
 

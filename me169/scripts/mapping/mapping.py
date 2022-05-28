@@ -14,6 +14,8 @@
 import rospy
 import numpy as np
 
+from scipy.special import expit
+
 from geometry_msgs.msg  import PoseStamped, Pose
 from nav_msgs.msg       import OccupancyGrid, MapMetaData
 from sensor_msgs.msg    import LaserScan
@@ -33,7 +35,7 @@ CORR_C = 0.154
 MAX_DIST_FROM_ROBOT = 4.1
 EPSILON = 1e-5
 
-UNKNOWN = -1
+UNKNOWN = 0.5
 OCC_THRESH = 0.65
 FREE_THRESH = 0.196
 
@@ -51,6 +53,10 @@ def maxpool(mat, kernel_size):
     mat_pad[:m,:n] = mat
     new_shape = (ny,ky,nx,kx)
     return np.nanmax(mat_pad.reshape(new_shape),axis=(1,3))
+
+
+def AngleDiff(t1: float, t2: float) -> float:
+    return (t1-t2) - 2.0*np.pi * round(0.5*(t1-t2)/np.pi)
 
 
 K = 5
@@ -71,14 +77,14 @@ class Mapping:
         mh = self.map.info.height
         map_grid = np.array(self.map.data).reshape((mh, mw))
         self.grid = maxpool(map_grid, (K,K)) / 100
-        self.grid[self.grid < 0] = OCC_THRESH
+        self.grid[self.grid < 0] = UNKNOWN
         self.grid[self.grid > OCC_THRESH] = OCC_THRESH
         self.grid[self.grid < FREE_THRESH] = FREE_THRESH
         self.w, self.h = self.grid.shape
         self.res = self.map.info.resolution * K
 
         # Compute prior and initialize logodds state
-        self.prior = np.log(self.grid / (1 - self.grid + EPSILON) + EPSILON)
+        self.prior = np.log(self.grid / (1 - self.grid))
         self.state = self.prior.copy()      # Logodds of occupancy belief
 
         # Setup map info
@@ -113,6 +119,9 @@ class Mapping:
         rospy.Subscriber('/scan', LaserScan, self.cb_laser, queue_size=1)
         # rospy.Subscriber('/lasermap', Marker, self.cb_laser, queue_size=1)
 
+        self.publish_occupy(self.grid)
+        self.pub_grid(self.map_pts)
+
     def cb_laser(self, msg: LaserScan):
         self.last_scan = msg
 
@@ -135,8 +144,9 @@ class Mapping:
         # Limits/Tolerances
         ang_min = self.last_scan.angle_min
         ang_inc = self.last_scan.angle_increment
-        max_dist = self.last_scan.range_max
-        pos_tol = self.res / 1.5
+        # max_dist = self.last_scan.range_max
+        max_dist = 2.5
+        pos_tol = self.res / 2
 
         # Laser data
         ranges = np.array(self.last_scan.ranges)
@@ -155,27 +165,30 @@ class Mapping:
 
                 d = np.sqrt(dx*dx + dy*dy)                          # Dist to robot
                 phi = np.arctan2(dy, dx) - rt                       # Robot -> Grid angle
-                k = int((phi - ang_min + ang_inc / 2) // ang_inc)   # Get laser index from angle
+                ang_diff = AngleDiff(phi + ang_inc / 2, ang_min)
+                k = int(ang_diff // ang_inc)   # Get laser index from angle
 
                 # Check if grid is visible
                 if 0 <= k < len(ranges) and d <= min(max_dist, ranges[k] + pos_tol):
                     # Compute inverse_range_sensor_model
                     z = ranges[k]                                   # Range reading
-                    if z < max_dist and abs(d - z) < pos_tol:
+                    if z < max_dist and abs(d - z) <= pos_tol:
+                        print(self.state[r,c], L_OCC - self.prior[r,c])
                         self.state[r,c] += L_OCC - self.prior[r,c]
-                    elif d < z:
+                    else:
                         self.state[r,c] += L_FREE - self.prior[r,c]
                 # Else: don't update logodds
 
         # TODO: publish occupancy
-        probs = 1 - (1 / (1 + np.exp(self.state)))
-        probs = (probs * 100).astype(np.uint8)
-
+        probs = (expit(self.state) * 100).astype(np.uint8)
+        self.publish_occupy(probs)
+    
+    def publish_occupy(self, probs):
         msg = OccupancyGrid()
         msg.info = self.info
         msg.data = probs.flatten().tobytes()
         self.pub_occ.publish(msg)
-        self.pub_grid(self.map_pts)
+        # self.pub_grid(self.map_pts)
 
     def pub_grid(self, gridpts):
         msg = Marker()

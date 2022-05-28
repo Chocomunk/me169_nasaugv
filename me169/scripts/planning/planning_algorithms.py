@@ -79,7 +79,6 @@ def astar_search(start, end, reachable, get_neighbors):
     found = False
     while not q.is_empty():
         curr = pop()                            # Get the next lowest-cost leaf
-        print(curr)
         if reachable(curr, end):                # If it is the goal, we finished!
             found = True
             break
@@ -126,7 +125,6 @@ class AStarPlan:
 
     def next_to_wall(self, r, c):
         for coord, _ in self.near_nodes(r, c, int(0.5 + BOT_RAD / self.res)):
-            print(coord, self.grid[coord])
             s = self.grid[coord]
             if s >= OCC_THRESH:
                 return True
@@ -139,8 +137,6 @@ class AStarPlan:
         for (r, c), dist in neighborhood:
             if not self.next_to_wall(r, c):
                 neighborhood_filtered.append(((r,c), dist))
-            else:
-                print((r,c))
         return neighborhood_filtered
 
     def end_inrange(self, pos, end, s=1):
