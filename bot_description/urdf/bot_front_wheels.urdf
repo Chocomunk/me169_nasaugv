@@ -76,7 +76,8 @@
     <parent link="axle"/>
     <child  link="cameraplate"/>
     <!-- <origin xyz="0.05308 0 0.03633" rpy="0 -0.297 0"/> -->
-    <origin xyz="0.05308 0 0.03633" rpy="0 -0.349 0"/>
+    <!-- <origin xyz="0.05308 0 0.03633" rpy="0 -0.349 0"/> -->
+    <origin xyz="0.05308 0 0.03633" rpy="0 0 0"/>
   </joint>
 
   <link name="cameraplate"/>
@@ -86,7 +87,7 @@
   <joint name="camerainternaloffset" type="fixed">
     <parent link="cameraplate"/>
     <child  link="camera_link"/>
-    <origin xyz="-0.00420 0.01750 0" rpy="0 0 0"/>
+    <origin xyz="-0.00420 0.01750 0" rpy="0 0 3.14156"/>
   </joint>
 
   <link name="camera_link"/>
@@ -97,7 +98,8 @@
     <parent link="camera_link"/>
     <child  link="laser"/>
     <!-- <origin xyz="0 0 0" rpy="0 0.297 0"/> -->
-    <origin xyz="0 0 0" rpy="0 0.349 0"/>
+    <!-- <origin xyz="0 0 0" rpy="0 0.349 0"/> -->
+    <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
   <link name="laser"/>

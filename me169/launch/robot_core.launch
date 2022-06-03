@@ -1,14 +1,16 @@
 <launch>
-    <!-- Map Yaml File. -->
-    <arg name="map" default="$(find me169_shared)/maps/keck308corner.yaml"/>
+  <!-- Map Yaml File. -->
+  <arg name="map" default="$(find me169_shared)/maps/keck308corner.yaml"/>
 
-    <!-- <include file="$(find depthtolaserscan)/launch/laserscan.launch" /> -->
+  <!-- <include file="$(find depthtolaserscan)/launch/laserscan.launch" /> -->
+  <include file="$(find me169)/launch/robotstate.launch" />
+  <include file="$(find rplidar_ros)/launch/rplidar.launch" />
 
-    <!-- Start the map server -->
-    <node name="map_server"
-        pkg ="map_server"
-        type="map_server"
-        args="$(arg map)"/>
+  <!-- Start the map server -->
+  <node name="map_server"
+      pkg ="map_server"
+      type="map_server"
+      args="$(arg map)"/>
 
   <node name="wheel_controller"
     pkg="me169"
@@ -22,4 +24,10 @@
   <node name="simpledriver"
     pkg="me169"
       type="simpledriver.py"/>
+  <node name="planner"
+    pkg="me169"
+      type="planner.py"/>
+  <!-- <node name="mapping"
+    pkg="me169"
+      type=" mapping.py"/> -->
 </launch>

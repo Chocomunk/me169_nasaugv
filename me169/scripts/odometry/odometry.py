@@ -59,10 +59,10 @@ class OdometryObj:
         self.brd_tf = tf2_ros.TransformBroadcaster()
 
         # Create a subscriber to listen to twist commands.
-        rospy.Subscriber('/vel_cmd', Twist, self.cb_vel_cmd)
+        rospy.Subscriber('/vel_cmd', Twist, self.cb_vel_cmd, queue_size=1)
 
         # Create a subscriber to listen to wheel state.
-        rospy.Subscriber('/wheel_state', JointState, self.cb_wheel_state)
+        rospy.Subscriber('/wheel_state', JointState, self.cb_wheel_state, queue_size=1)
 
 
     # Velocity Command Message Callback

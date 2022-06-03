@@ -84,7 +84,7 @@ class Localization:
                                         queue_size=10)
 
         # Create a subscriber to listen to odometry.
-        rospy.Subscriber('/odom', Odometry, self.cb_odom)
+        rospy.Subscriber('/odom', Odometry, self.cb_odom, queue_size=1)
 
         # Create a subscriber to listen to navigation goal.
         rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, self.cb_init_pose)

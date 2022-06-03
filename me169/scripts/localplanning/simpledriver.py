@@ -26,7 +26,7 @@ VEL_TOL = 0.4               # (m/s)
 THETA_TOL = math.pi/4.      # (radians)
 OMEGA_LIM = math.pi/3.      # (rad/s)
 TURN_DELAY = 0.25           # (sec)
-SCAN_ANGLE = math.pi/3      # (radians)
+SCAN_ANGLE = math.pi/36      # (radians)
 WALL_THRESH = 0.3           # (meters)
 
 
@@ -38,11 +38,14 @@ def angle_diff(angle1, angle2):
 
 def closest_scan(scan: LaserScan, angle_range=SCAN_ANGLE):
     """This function returns the float value of the minimum laser scan in the specified angle range."""
-    offset_l = -int((scan.angle_min + angle_range/2) / scan.angle_increment)
-    offset_r =  int((scan.angle_max - angle_range/2) / scan.angle_increment)
+    t = scan.angle_max
+    b = scan.angle_min
+    offset_l = int((angle_range/2) / (scan.angle_increment))
+    offset_r = int((t - b - angle_range/2) / (scan.angle_increment))
+    n = len(scan.ranges)
     start_index = max(0, offset_l)
-    end_index = len(scan.ranges) - max(0, offset_r)
-    clamped_range = np.array(scan.ranges[start_index:end_index+1])
+    end_index = min(n, offset_r)
+    clamped_range = np.array(scan.ranges[:start_index+1] + scan.ranges[end_index:])
     nonzero = clamped_range[clamped_range > 0]
     return 0 if len(nonzero) == 0 else np.min(nonzero)
 
@@ -87,16 +90,21 @@ class DriveTurn:
             if not self.align or abs(adiff) < THETA_TOL:
                 adiff = 0
                 self.finished = True
+            print("in range")
         else:
             # Find heading to goal position
             goal_th = math.atan2(dy, dx)
             adiff = angle_diff(goal_th, cur_th)
 
             # Compute desired velocity and omega
-            if closest_scan(scan) > WALL_THRESH:
+            close = closest_scan(scan)
+            if close > WALL_THRESH:
+                print("hi", dist, self.align)
                 vd = LAM_FORW * (dist if self.align else 1)
                 vd = min(VEL_TOL, max(-VEL_TOL, vd))    # Clamp
                 vx = vd * max(0, math.cos(adiff))
+            else:
+                print("too close " + str(close))
 
         # Compute rotating speed
         wz = LAM_TURN * adiff

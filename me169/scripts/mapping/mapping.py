@@ -164,7 +164,7 @@ class Mapping:
                 dy = y-ry                                           # Vec from robot
 
                 d = np.sqrt(dx*dx + dy*dy)                          # Dist to robot
-                phi = np.arctan2(dy, dx) - rt                       # Robot -> Grid angle
+                phi = np.arctan2(dy, dx) - rt + np.pi               # Robot -> Grid angle
                 ang_diff = AngleDiff(phi + ang_inc / 2, ang_min)
                 k = int(ang_diff // ang_inc)   # Get laser index from angle
 
@@ -174,9 +174,11 @@ class Mapping:
                     # Compute inverse_range_sensor_model
                     z = ranges[k]                                   # Range reading
                     if z < max_dist and abs(d - z) <= pos_tol:
-                        self.state[r,c] += L_OCC - self.prior[r,c]
+                        shift = L_OCC - self.prior[r,c]
+                        self.state[r,c] = min(L_OCC, self.state[r,c] + shift)
                     else:
-                        self.state[r,c] += L_FREE - self.prior[r,c]
+                        shift = L_FREE - self.prior[r,c]
+                        self.state[r,c] = max(L_FREE, self.state[r,c] + shift)
                 # Else: don't update logodds
 
         # TODO: publish occupancy
