@@ -1,0 +1,32 @@
+<launch>
+  <!-- Map Yaml File. -->
+  <include file="$(find gme169)/launch/robotstate.launch" />
+  <include file="$(find rplidar_ros)/launch/rplidar.launch" />
+
+  <node name="wheel_controller"
+    pkg="gme169"
+      type="wheelcontrol.py"/>
+  <node name="odometry"
+    pkg="gme169"
+      type="odometry.py"/>
+
+  <!-- Start gmapping for SLAM -->
+  <node name="slam_gmapping"
+    pkg="gmapping"
+    type="slam_gmapping">
+    <param name="base_frame" value="base" />
+    <param name="delta" value="0.1" />
+    <!-- <param name="map_update_interval" value="2.5" /> -->
+    <param name="particles" value="50" />
+  </node>
+
+  <node name="map_pose"
+    pkg="gme169"
+      type="map_pose.py"/>
+  <node name="planner"
+    pkg="gme169"
+      type="planner.py"/>
+  <node name="simpledriver"
+    pkg="gme169"
+      type="simpledriver.py"/>
+</launch>

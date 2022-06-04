@@ -4,7 +4,9 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
+        - /Global Options1
         - /Odometry1/Shape1
+        - /Path1/Status1
       Splitter Ratio: 0.5
     Tree Height: 344
   - Class: rviz/Selection
@@ -142,10 +144,6 @@ Visualization Manager:
           Value: true
         base:
           Value: true
-        camera_depth_frame:
-          Value: true
-        camera_depth_optical_frame:
-          Value: true
         camera_link:
           Value: true
         cameraplate:
@@ -173,10 +171,8 @@ Visualization Manager:
               axle:
                 cameraplate:
                   camera_link:
-                    camera_depth_frame:
-                      camera_depth_optical_frame:
-                        laser:
-                          {}
+                    laser:
+                      {}
                 leftwheel:
                   {}
                 rightwheel:
@@ -224,39 +220,39 @@ Visualization Manager:
       Use Timestamp: false
       Value: true
     - Class: rviz/Marker
-      Enabled: true
+      Enabled: false
       Marker Topic: /lasermap
       Name: Real LaserScan
       Namespaces:
-        "": true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
     - Class: rviz/Marker
-      Enabled: true
+      Enabled: false
       Marker Topic: /waypmap
       Name: Path
       Namespaces:
-        "": true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
     - Alpha: 0.6000000238418579
       Class: rviz/Map
       Color Scheme: map
       Draw Behind: false
-      Enabled: true
+      Enabled: false
       Name: Occupancy Map
       Topic: /occupy
       Unreliable: false
       Use Timestamp: false
-      Value: true
+      Value: false
     - Class: rviz/Marker
-      Enabled: true
+      Enabled: false
       Marker Topic: /wallpts
       Name: Nearby Wall Points
       Namespaces:
-        "": true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
     - Alpha: 0.6000000238418579
       Cell Size: 0.12700000405311584
       Class: rviz/Grid
@@ -276,12 +272,22 @@ Visualization Manager:
       Reference Frame: <Fixed Frame>
       Value: false
     - Class: rviz/Marker
-      Enabled: true
+      Enabled: false
       Marker Topic: /gridpts
       Name: Marker
       Namespaces:
-        "": true
+        {}
       Queue Size: 100
+      Value: false
+    - Alpha: 0.699999988079071
+      Class: rviz/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: Map
+      Topic: /igain
+      Unreliable: false
+      Use Timestamp: false
       Value: true
   Enabled: true
   Global Options:
@@ -310,7 +316,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0.020000074058771133
+      Angle: -7.880001068115234
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -320,10 +326,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 66.21818542480469
+      Scale: 78.89712524414062
       Target Frame: <Fixed Frame>
-      X: -0.2341277301311493
-      Y: 0.17806345224380493
+      X: 1.5514180660247803
+      Y: -3.778402328491211
     Saved:
       - Angle: 0
         Class: rviz/TopDownOrtho
@@ -369,5 +375,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1280
-  X: -2
-  Y: -4
+  X: 0
+  Y: 20

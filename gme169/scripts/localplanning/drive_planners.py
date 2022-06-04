@@ -1,32 +1,19 @@
-#!/usr/bin/env python3
-#
-#   simpledriver.py
-#
-#   Drive controller node.  This
-#   (a) converts a comparison between current pose and target pose into body velocity commands.
-#
-#   Node:       /local_driver
-#   Publish:    /vel_cmd                geometry_msgs/Twist
-#   Subscribe:  /pose                   geometry_msgs/PoseStamped
-#               /move_base_simple/goal  geometry_msgs/PoseStamped
-#               /scan                   sensor_msgs/LaserScan
-#
 import math
 import rospy
 import numpy as np
 
-from geometry_msgs.msg  import PoseStamped, Twist
+from geometry_msgs.msg  import PoseStamped
 from sensor_msgs.msg    import LaserScan
 
 
 LAM_TURN = 1 / 0.7          # time constant multiplier for the angular speed (hz)
-LAM_FORW = 1 / 1            # timst contant multiplier for forward speed (hz)
+LAM_FORW = 1.5 / 1            # timst contant multiplier for forward speed (hz)
 POS_TOL = 0.1               # (meters)
 VEL_TOL = 0.4               # (m/s)
 THETA_TOL = math.pi/4.      # (radians)
 OMEGA_LIM = math.pi/3.      # (rad/s)
 TURN_DELAY = 0.25           # (sec)
-SCAN_ANGLE = math.pi/36      # (radians)
+SCAN_ANGLE = math.pi/4      # (radians)
 WALL_THRESH = 0.3           # (meters)
 
 
@@ -53,7 +40,10 @@ def closest_scan(scan: LaserScan, angle_range=SCAN_ANGLE):
 class DriveTurn:
     """ Drive and turn simultaneously, then turn into the correct heading """
 
-    def __init__(self):
+    def __init__(self, on_finish, pub_obstruct):
+        self.on_finish = on_finish
+        self.pub_obstruct = pub_obstruct
+
         self.last_facing_time = rospy.Time.now()
         self.finished = True
         self.align = True
@@ -90,6 +80,7 @@ class DriveTurn:
             if not self.align or abs(adiff) < THETA_TOL:
                 adiff = 0
                 self.finished = True
+                self.on_finish()
         else:
             # Find heading to goal position
             goal_th = math.atan2(dy, dx)
@@ -100,6 +91,9 @@ class DriveTurn:
                 vd = LAM_FORW * (dist if self.align else 1)
                 vd = min(VEL_TOL, max(-VEL_TOL, vd))    # Clamp
                 vx = vd * max(0, math.cos(adiff))
+                self.pub_obstruct(False)
+            else:
+                self.pub_obstruct(True)
 
         # Compute rotating speed
         wz = LAM_TURN * adiff
@@ -177,80 +171,3 @@ class TurnDriveTurn:
         wz = min(OMEGA_LIM, max(-OMEGA_LIM, wz))        # Clamp
 
         return vx, wz
-
-
-#
-#   LocalDriver Object
-#
-class LocalDriver:
-    # Initialize.
-    def __init__(self):
-        # Define Variables
-        self.last_pose = PoseStamped()
-        self.nav_goal = PoseStamped()
-        self.last_scan = LaserScan()
-
-        self.controller = DriveTurn()
-
-        # Create a publisher to send velocity commands.
-        self.pub_vcmd = rospy.Publisher('/vel_cmd', Twist,
-                                        queue_size=10)
-
-        # Create a subscriber to listen to map pose.
-        rospy.Subscriber('/pose', PoseStamped, self.cb_pose)
-
-        # Create a subscriber to listen to navigation goal.
-        rospy.Subscriber('/waypoint_intermediate', PoseStamped, self.cb_nav_goal, (False,))
-        rospy.Subscriber('/waypoint_final', PoseStamped, self.cb_nav_goal, (True,))
-
-        # Create a subscriber to listen to the lase scan.
-        rospy.Subscriber('/scan', LaserScan, self.cb_laser)
-
-    def cb_nav_goal(self, msg: PoseStamped, align=True):
-        assert (msg.header.frame_id == "map"), "Nav goal not in map frame"
-        self.nav_goal = msg
-        self.controller.reset(align)
-
-    def cb_pose(self, msg: PoseStamped):
-        self.last_pose = msg
-
-    def cb_laser(self, msg: LaserScan):
-        self.last_scan = msg
-
-    def cb_timer(self, event):
-        if not self.controller.finished:
-            vx, wz = self.controller.update(self.last_pose, self.nav_goal, self.last_scan)
-
-            # Publish velocity commands
-            msg = Twist()
-            msg.linear.x = vx
-            msg.linear.y = 0.0
-            msg.linear.z = 0.0
-            msg.angular.x = 0.0
-            msg.angular.y = 0.0
-            msg.angular.z = wz
-            self.pub_vcmd.publish(msg)
-
-
-
-#
-#   Main Code
-#
-if __name__ == "__main__":
-    # Initialize the ROS node.
-    rospy.init_node('local_driver')
-
-    # Define durations
-    duration = rospy.Duration(1. / 10)       # 10 Hz
-    dt       = duration.to_sec()
-
-    # Instantiate the Local Driver object
-    local_driver = LocalDriver()
-
-    # Create the timer.
-    timer = rospy.Timer(duration, local_driver.cb_timer)
-
-    # Report and spin (waiting while callbacks do their work).
-    rospy.loginfo("Local Driver running with dt = %.3f sec..." % dt)
-    rospy.spin()
-    rospy.loginfo("Local Driver stopped.")

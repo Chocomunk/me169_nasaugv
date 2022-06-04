@@ -1,0 +1,13 @@
+<launch>
+  <!-- Rviz configuration file parameter. -->
+  <arg name="cfg"   default="$(find depthtolaserscan)/rviz/laserscan.rviz"/>
+
+  <!-- Run the rviz visualization, with the specified config file -->
+  <!-- Kill everything if this stops. -->
+  <node pkg="rviz"
+  	type="rviz"
+	name="rviz"
+	args="-d $(arg cfg)"
+	output="screen"
+	required="true"/>
+</launch>

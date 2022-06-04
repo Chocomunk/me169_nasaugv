@@ -1,0 +1,13 @@
+<launch>
+  <!-- URDF parameter. -->
+  <arg name="urdf"  default="bot.urdf"/>
+  <arg name="model" default="$(find bot_description)/urdf/$(arg urdf)"/>
+
+  <!-- Load the URDF file into the robot_description parameter. -->
+  <param name="robot_description" textfile="$(arg model)"/>
+
+  <!-- Publish all the robot frames. -->
+  <node name="robot_state_publisher"
+	pkg ="robot_state_publisher"
+  	type="robot_state_publisher"/>
+</launch>
