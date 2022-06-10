@@ -5,7 +5,7 @@ import rospy
 from collections import deque
 
 from nav_msgs.msg       import OccupancyGrid, MapMetaData
-from geometry_msgs.msg  import PoseStamped, PointStamped
+from geometry_msgs.msg  import PoseStamped, PointStamped, Point
 from visualization_msgs.msg import Marker
 from sensor_msgs.msg    import LaserScan
 import numpy as np
@@ -20,16 +20,16 @@ def log(x):
     return np.log(x, where=x>0)
 
 
-def neighborhood(i, h, w, s=1):
-    """ Return list of ((row, col), dist) neighbors """
-    r, c = i
-    d = np.sqrt(2) * s
-    neighbors = [
-        ((r+s, c+s), d), ((r-s, c-s), d), ((r-s, c+s), d), ((r+s, c-s), d), 
-        ((r+s, c), s),   ((r-s, c), s),   ((r, c+s), s),   ((r, c-s), s)
-    ]
-    return [((r,c), d) for (r,c), d in neighbors 
-            if (0 <= r < h) and (0 <= c < w)]
+# def neighborhood(i, h, w, s=1):
+#     """ Return list of ((row, col), dist) neighbors """
+#     r, c = i
+#     d = np.sqrt(2) * s
+#     neighbors = [
+#         # ((r+s, c+s), d), ((r-s, c-s), d), ((r-s, c+s), d), ((r+s, c-s), d), 
+#         ((r+s, c), s),   ((r-s, c), s),   ((r, c+s), s),   ((r, c-s), s)
+#     ]
+#     return [((r,c), d) for (r,c), d in neighbors 
+#             if (0 <= r < h) and (0 <= c < w)]
 
 
 #
@@ -51,6 +51,9 @@ class Explorer:
                                         queue_size=10)
         # Create a publisher to send the selected exploration point
         self.pub_igain = rospy.Publisher('/igain', OccupancyGrid,
+                                        queue_size=10)
+
+        self.pub_waypmap = rospy.Publisher('/seegoal', Marker,
                                         queue_size=10)
 
         # Create a subscriber to listen to robot pose in map.
@@ -98,9 +101,10 @@ class Explorer:
 
         while q:
             coord = q.popleft()
-            for child, _ in neighborhood(coord, h, w):
+            r, c = coord
+            for child in [(r+1,c), (r,c+1), (r-1,c), (r,c-1)]:
                 p = occ[child]
-                if not child in reachable and 0 <= p < 0.65:
+                if not child in reachable and 0 <= p < 65:
                     reachable.add(child)
                     q.append(child)
 
@@ -126,9 +130,11 @@ class Explorer:
 
         pos = self.last_pose.pose.position
         start = (pos.x, pos.y)
-        # start_coord = tuple(reversed(occ_map.to_grid(np.array(start))))
-        explored = list(zip(*np.where((p >= 0) & (p < 0.65))))
-        # explored = self.reachable_coords(p, start_coord)
+        start_coord = tuple(reversed(occ_map.to_grid(np.array(start))))
+        print(p)
+
+        # explored = list(zip(*np.where((p >= 0) & (p < 25))))
+        explored = self.reachable_coords(p, start_coord)
         # print(explored)
         for v in explored:
             if type(v) != tuple:
@@ -138,32 +144,59 @@ class Explorer:
         start_t = rospy.Time.now()
         k = 0
         same = False
+        VT = np.zeros(VTm1.shape)
 
         h,w = VTm1.shape
-        # while not same:
-        for iter in np.arange(20):
+        while not same:
+        #for iter in np.arange(10):
             print(k)
             # VT = self.value_iter(VTm1, binary, explored)
-            VT = np.zeros(VTm1.shape)
             for i in explored:
+                r,c = i
                 if binary[i] > 0:
                     VT[i] = binary[i]
                 else:
-                    VT[i] = max(VTm1[j] - d for j, d in neighborhood(i, h, w))
-            # same = np.array_equal(VT, VTm1) # (VT == VTm1).all()
+                    VT[i] = max(VTm1[r,c-1]-1, VTm1[r+1,c]-1, VTm1[r,c+1]-1, VTm1[r-1,c]-1)
+            same = np.array_equal(VT, VTm1) # (VT == VTm1).all()
             VTm1 = VT[:,:]
             k += 1
         print("End compute " + str((rospy.Time.now() - start_t).to_sec()))
+        rmin = np.min(VT) # minimum measurement
+        VT = VT + rmin + 1
+        rmin = 0
+        rmax = np.max(VT) # maximum measurement
+        tmin = 0 # minimum range of scaling
+        tmax = 100 # max range of scaling
+        vtmap = ((VT - rmin)/(rmax - rmin))*(tmax-tmin) + tmin
 
-        ipub.data = (VT).astype(np.uint8).flatten().tobytes()
+        ipub.data = (vtmap).astype(np.uint8).flatten().tobytes()
         self.pub_igain.publish(ipub)
         print("published")
 
+        # for i in explored:
+        #     cur_max = 0
+        #     if VT[i] > cur_max:
+        #         cur_max = VT[i]
+        #         r, c = i
+        #         goal_coords = np.array([r,c])
+
         goal_coords = np.array(list(reversed(np.unravel_index(np.argmax(VT), VT.shape))))
         goal = occ_map.to_map(goal_coords)
+        goal = np.array([goal[0], goal[1]])
         print(goal_coords, goal)
 
         self.pub_exp(goal)
+
+        pointes = np.zeros((8,2))
+        pointes[0,0], pointes[0,1] = goal[0], goal[1]
+        # pointes[1,0], pointes[0,1] = goal[0], goal[1]
+        # pointes[2,0], pointes[0,1] = goal[0], goal[1]
+        # pointes[3,0], pointes[0,1] = -goal[0], -goal[1]
+        pointes[4,0], pointes[4,1] = goal[1], goal[0]
+        # pointes[5,0], pointes[0,1] = goal[1], goal[0]
+        # pointes[6,0], pointes[0,1] = goal[1], goal[0]
+        # pointes[7,0], pointes[0,1] = -goal[1], -goal[0]
+        self.pub_path_pts(pointes)
 
         # CODE BELOW FOR PUBLSIHING POSESTAMPED MSG
         # self.nav_goal = msg
@@ -187,9 +220,35 @@ class Explorer:
         msg.header.frame_id = "map"
         msg.pose.position.x = point[0]
         msg.pose.position.y = point[1]
-        self.pub_exppt.publish(msg)
         
         self.pub_wpinter.publish(msg)
+    
+    def pub_path_pts(self, path):
+        msg = Marker()
+        msg.header.frame_id = "map"
+        msg.type = Marker.POINTS
+        msg.action = Marker.ADD
+
+        s = self.last_map.info.resolution
+        msg.scale.x = s
+        msg.scale.y = s
+        msg.scale.z = s
+
+        msg.color.a = 1.0
+        msg.color.r = 0.5
+        msg.color.g = 0.5
+        msg.color.b = 1
+
+        pts = []
+        for i in range(len(path)):
+            pt = Point()
+            pt.x = path[i,0]
+            pt.y = path[i,1]
+            pts.append(pt)
+        
+        msg.points = pts
+        self.pub_waypmap.publish(msg)
+
 
 #
 #   Main Code
